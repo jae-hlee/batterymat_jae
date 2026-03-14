@@ -1,0 +1,15 @@
+TB-mBJ Static Run — Pre-submission checklist
+=============================================
+
+Before submitting this calculation:
+
+1. Copy CHGCAR from the PBE relaxation:
+       cp /Users/jaelee/Desktop/repo/batterymat_backup/batterymat/screening_cathode/dft_inputs/JVASP-141792/1_pbe_relax_lithiated/CHGCAR /Users/jaelee/Desktop/repo/batterymat_backup/batterymat/screening_cathode/dft_inputs/JVASP-141792/3_tmbj_static_lithiated/CHGCAR
+
+2. Replace POSCAR with the relaxed geometry:
+       cp /Users/jaelee/Desktop/repo/batterymat_backup/batterymat/screening_cathode/dft_inputs/JVASP-141792/1_pbe_relax_lithiated/CONTCAR /Users/jaelee/Desktop/repo/batterymat_backup/batterymat/screening_cathode/dft_inputs/JVASP-141792/3_tmbj_static_lithiated/POSCAR
+
+3. The INCAR already includes ICHARG = 11 to read the CHGCAR.
+
+Reference: Li BCC metal energy for voltage calculation ~ -1.90 eV/atom
+(PBE, Li_sv PAW, ENCUT=520, consistent with Materials Project).
