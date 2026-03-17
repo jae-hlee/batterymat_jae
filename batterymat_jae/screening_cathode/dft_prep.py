@@ -1,9 +1,13 @@
-"""VASP input generation and DFT voltage helper for cathode candidates."""
+"""VASP input generation for sequential supercell delithiation voltage curves."""
+import json
 import os
+import re
 import sys
 import warnings
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
 
 # Module-level import so tests can patch batterymat.screening_cathode.dft_prep.Vacancy
 from jarvis.analysis.defects.vacancy import Vacancy
@@ -22,19 +26,6 @@ def compute_dft_voltage(
     """Compute average intercalation voltage from PBE total energies.
 
     Formula: V = (E_delithiated - E_lithiated - n_li * E_li_metal) / n_li
-
-    Sign convention: for cathodes, E_delithiated > E_lithiated, so V > 0.
-    Consistent with screen.py: V = (E_removed - E_full - unary_energy(ion)).
-
-    Args:
-        e_lithiated:   Total DFT energy of fully lithiated structure (eV).
-        e_delithiated: Total DFT energy of delithiated structure (eV).
-        n_li:          Number of Li atoms removed (1 for single-vacancy run).
-        e_li_metal:    DFT energy of Li BCC metal per atom (eV/atom).
-                       Expected ~-1.90 eV/atom for PBE/Li_sv/ENCUT=520.
-
-    Returns:
-        Average voltage in volts (positive for cathodes).
     """
     if n_li == 0:
         raise ValueError("n_li must be > 0")
@@ -42,29 +33,48 @@ def compute_dft_voltage(
 
 
 # ---------------------------------------------------------------------------
-# Materials Project recommended PAW potentials (subset)
-# Ref: https://materialsproject.org/docs/methodology/pseudopotentials
+# PAW potentials from JARVIS default_potcars.json
 # ---------------------------------------------------------------------------
-_MP_PAW = {
-    "Li": "Li_sv", "Na": "Na_pv", "K": "K_sv", "Rb": "Rb_sv", "Cs": "Cs_sv",
-    "Ca": "Ca_sv", "Sr": "Sr_sv", "Ba": "Ba_sv",
-    "Sc": "Sc_sv", "Ti": "Ti_pv", "V": "V_pv", "Cr": "Cr_pv",
-    "Mn": "Mn_pv", "Fe": "Fe_pv", "Co": "Co", "Ni": "Ni_pv",
-    "Cu": "Cu_pv", "Zn": "Zn", "Ga": "Ga_d", "Ge": "Ge_d",
-    "Y": "Y_sv", "Zr": "Zr_sv", "Nb": "Nb_pv", "Mo": "Mo_pv",
-    "Ru": "Ru_pv", "Rh": "Rh_pv", "Pd": "Pd", "Ag": "Ag",
-    "Sn": "Sn_d", "Sb": "Sb",
-    "W": "W_pv", "Re": "Re_pv", "Os": "Os_pv", "Ir": "Ir",
-    "Pt": "Pt", "Au": "Au",
-    "O": "O", "S": "S", "Se": "Se", "Te": "Te",
-    "F": "F", "Cl": "Cl", "Br": "Br", "I": "I",
-    "N": "N", "P": "P", "As": "As",
-    "C": "C", "Si": "Si", "B": "B",
-    "Al": "Al", "In": "In_d",
-    "La": "La", "Ce": "Ce", "Pr": "Pr_3", "Nd": "Nd_3",
-    "Sm": "Sm_3", "Eu": "Eu_2", "Gd": "Gd_3", "Tb": "Tb_3",
-    "Dy": "Dy_3", "Ho": "Ho_3", "Er": "Er_3", "Tm": "Tm_3",
-    "Yb": "Yb_2", "Lu": "Lu_3",
+def _load_jarvis_paw() -> Dict[str, str]:
+    """Load PAW potential labels from JARVIS default_potcars.json."""
+    import jarvis
+    potcar_json = Path(jarvis.__file__).parent / "io" / "vasp" / "default_potcars.json"
+    return json.loads(potcar_json.read_text())
+
+
+_JARVIS_PAW = _load_jarvis_paw()
+
+# ---------------------------------------------------------------------------
+# Hubbard U values (Dudarev, LDAUTYPE=2)
+# Per-element values — JARVIS only supports uniform U, so we maintain these.
+# ---------------------------------------------------------------------------
+_HUBBARD_U = {
+    "Mn": 3.9,
+    "Fe": 5.3,
+    "Co": 3.32,
+    "Ni": 6.2,
+    "V": 3.25,
+    "Cr": 3.7,
+    "Mo": 4.38,
+    "W": 6.2,
+}
+
+_OPTB88VDW_TAGS = """\
+GGA = OR
+LUSE_VDW = .TRUE.
+AGGAC = 0.0
+"""
+
+_E_LI_METAL = {
+    "pbe": -0.925,
+    "optb88vdw": -0.92188,  # JARVIS JVASP-14616 optB88-vdW
+}
+
+_LAYERED_SPACEGROUPS = {
+    166,  # R-3m (LiCoO2, NMC, NCA)
+    194,  # P63/mmc (O3-type, graphite)
+    12,   # C2/m (Li2MnO3, Li-rich layered)
+    15,   # C2/c (some Li-rich layered)
 }
 
 _PBE_INCAR = """\
@@ -73,88 +83,147 @@ NSW = 100
 ISIF = 3
 ENCUT = 520
 EDIFF = 1E-6
-EDIFFG = -0.01
+EDIFFG = -0.03
 PREC = Accurate
 ISMEAR = 0
 SIGMA = 0.05
 LWAVE = .TRUE.
 LCHARG = .TRUE.
-"""
-
-_TMBJ_INCAR = """\
-IBRION = -1
-NSW = 0
-ENCUT = 520
-EDIFF = 1E-6
-METAGGA = MBJ
+NELM = 500
+ISPIN = 2
 LASPH = .TRUE.
-ICHARG = 11
-PREC = Accurate
-ISMEAR = 0
-SIGMA = 0.05
+LMAXMIX = 4
+ISTART = 0
+ISYM = 0
 LORBIT = 11
-NEDOS = 2000
-LWAVE = .FALSE.
-LCHARG = .FALSE.
+LREAL = Auto
+NCORE = 8
+KPAR = 2
+NSIM = 8
 """
 
-_KPOINTS = """\
-Automatic mesh
-0
-Gamma
-3 3 3
-0 0 0
-"""
-
-
-def write_pbe_relax_incar(directory) -> None:
-    """Write PBE relaxation INCAR to directory."""
-    Path(directory, "INCAR").write_text(_PBE_INCAR)
-
-
-def write_tmbj_static_incar(directory) -> None:
-    """Write TB-mBJ static INCAR to directory."""
-    Path(directory, "INCAR").write_text(_TMBJ_INCAR)
-
-
-def write_kpoints(directory) -> None:
-    """Write a Gamma-centered 3x3x3 KPOINTS to directory."""
-    Path(directory, "KPOINTS").write_text(_KPOINTS)
-
-
-def write_potcar_spec(directory, elements: List[str]) -> None:
-    """Write POTCAR_spec listing recommended PAW labels for elements.
-
-    Unknown elements fall back to the bare element symbol.
-    """
-    labels = [_MP_PAW.get(el, el) for el in elements]
-    Path(directory, "POTCAR_spec").write_text("\n".join(labels) + "\n")
-
-
-def write_tmbj_readme(tmbj_dir, pbe_dir) -> None:
-    """Write README in a TB-mBJ directory explaining CHGCAR dependency."""
-    content = f"""\
-TB-mBJ Static Run — Pre-submission checklist
-=============================================
-
-Before submitting this calculation:
-
-1. Copy CHGCAR from the PBE relaxation:
-       cp {pbe_dir}/CHGCAR {tmbj_dir}/CHGCAR
-
-2. Replace POSCAR with the relaxed geometry:
-       cp {pbe_dir}/CONTCAR {tmbj_dir}/POSCAR
-
-3. The INCAR already includes ICHARG = 11 to read the CHGCAR.
-
-Reference: Li BCC metal energy for voltage calculation ~ -1.90 eV/atom
-(PBE, Li_sv PAW, ENCUT=520, consistent with Materials Project).
-"""
-    Path(tmbj_dir, "README").write_text(content)
+_DEFAULT_MAGMOM = {
+    "Mn": 4.0,
+    "Fe": 5.0,
+    "Ni": 2.0,
+    "Co": 0.6,
+    "V": 3.0,
+    "Cr": 3.0,
+    "Mo": 3.0,
+    "W": 2.0,
+}
 
 
 # ---------------------------------------------------------------------------
-# Delithiated structure generation
+# Layered-structure detection
+# ---------------------------------------------------------------------------
+
+def _get_spacegroup_number(jid: str, dft3d_df=None) -> Optional[int]:
+    """Look up spacegroup number from JARVIS dft_3d DataFrame."""
+    if dft3d_df is None:
+        return None
+    import pandas as pd
+    for _, row in dft3d_df.iterrows():
+        if row.get("jid") == jid and "spg_number" in row:
+            try:
+                return int(row["spg_number"])
+            except (ValueError, TypeError):
+                return None
+    return None
+
+
+def _is_layered(jid: str, dft3d_df=None) -> bool:
+    """Check if a material is layered based on spacegroup whitelist."""
+    spg = _get_spacegroup_number(jid, dft3d_df)
+    if spg is None:
+        return False
+    return spg in _LAYERED_SPACEGROUPS
+
+
+def _resolve_functional(jid: str, dft3d_df=None, functional: str = "auto") -> str:
+    """Resolve functional choice.
+
+    Args:
+        jid:        JARVIS JID.
+        dft3d_df:   Pre-loaded JARVIS-DFT DataFrame (needs spg_number column).
+        functional: "auto", "pbe", or "optb88vdw".
+
+    Returns:
+        Resolved functional string: "pbe" or "optb88vdw".
+    """
+    if functional == "auto":
+        return "optb88vdw" if _is_layered(jid, dft3d_df) else "pbe"
+    if functional in ("pbe", "optb88vdw"):
+        return functional
+    raise ValueError(f"Unknown functional: {functional!r}. Use 'auto', 'pbe', or 'optb88vdw'.")
+
+
+# ---------------------------------------------------------------------------
+# INCAR / KPOINTS / POTCAR helpers
+# ---------------------------------------------------------------------------
+
+def _hubbard_u_lines(elements: List[str]) -> str:
+    """Generate LDAU INCAR lines for elements that have MP Hubbard U values."""
+    needs_u = any(el in _HUBBARD_U for el in elements)
+    if not needs_u:
+        return ""
+    ldaul = [2 if el in _HUBBARD_U else -1 for el in elements]
+    ldauu = [_HUBBARD_U.get(el, 0.0) for el in elements]
+    ldauj = [0.0] * len(elements)
+    lines = [
+        "LDAU = .TRUE.",
+        "LDAUTYPE = 2",
+        f"LDAUL = {' '.join(str(v) for v in ldaul)}",
+        f"LDAUU = {' '.join(f'{v:.2f}' for v in ldauu)}",
+        f"LDAUJ = {' '.join(f'{v:.2f}' for v in ldauj)}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def write_relax_incar(directory, elements: List[str] = None,
+                      isif: int = 3, nsw: int = 100,
+                      magmom_str: str = None,
+                      functional: str = "pbe") -> None:
+    """Write relaxation INCAR to directory.
+
+    Args:
+        functional: "pbe" or "optb88vdw". When "optb88vdw", appends
+                    GGA=OR, LUSE_VDW, AGGAC tags for optB88-vdW.
+    """
+    content = _PBE_INCAR
+    content = content.replace("ISIF = 3", f"ISIF = {isif}")
+    content = content.replace("NSW = 100", f"NSW = {nsw}")
+    if functional == "optb88vdw":
+        content += _OPTB88VDW_TAGS
+    if elements:
+        content += _hubbard_u_lines(elements)
+    if magmom_str:
+        content += f"MAGMOM = {magmom_str}\n"
+    Path(directory, "INCAR").write_text(content)
+
+
+def write_pbe_relax_incar(directory, elements: List[str] = None,
+                          isif: int = 3, nsw: int = 100,
+                          magmom_str: str = None) -> None:
+    """Write PBE relaxation INCAR to directory. Alias for write_relax_incar()."""
+    write_relax_incar(directory, elements=elements, isif=isif, nsw=nsw,
+                      magmom_str=magmom_str, functional="pbe")
+
+
+def write_kpoints(directory, mesh: str = "3 3 3") -> None:
+    """Write a Gamma-centered KPOINTS to directory."""
+    content = f"Automatic mesh\n0\nGamma\n{mesh}\n0 0 0\n"
+    Path(directory, "KPOINTS").write_text(content)
+
+
+def write_potcar_spec(directory, elements: List[str]) -> None:
+    """Write POTCAR_spec listing recommended PAW labels for elements."""
+    labels = [_JARVIS_PAW.get(el, el) for el in elements]
+    Path(directory, "POTCAR_spec").write_text("\n".join(labels) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# ALIGNN energy helper
 # ---------------------------------------------------------------------------
 
 def _alignn_energy(atoms) -> float:
@@ -171,46 +240,67 @@ def _alignn_energy(atoms) -> float:
     return ase_atoms.get_potential_energy()
 
 
-def get_delithiated_structure(atoms):
-    """Return the lowest-energy single-Li-vacancy structure.
+# ---------------------------------------------------------------------------
+# Vacancy selection
+# ---------------------------------------------------------------------------
 
-    Uses ALIGNN-ranked Wyckoff-inequivalent vacancy configurations.
-    If n_Li == 1, returns the fully delithiated host directly.
-    If n_Li == 0, raises ValueError.
+def get_next_vacancy(atoms) -> Tuple:
+    """Return the lowest-energy single-Li-vacancy structure with metadata.
 
     Args:
-        atoms: jarvis.core.atoms.Atoms object (fully lithiated).
+        atoms: jarvis.core.atoms.Atoms object.
 
     Returns:
-        jarvis.core.atoms.Atoms -- delithiated structure.
+        (defect_structure, removed_atom_index, info_dict)
+        info_dict has keys: 'n_candidates', 'candidate_energies', 'selected_energy'
     """
     li_indices = [i for i, el in enumerate(atoms.elements) if el == "Li"]
     n_li = len(li_indices)
 
     if n_li == 0:
-        raise ValueError(
-            f"Structure has no Li atoms — cannot generate delithiated structure."
-        )
+        raise ValueError("Structure has no Li atoms — cannot create vacancy.")
 
     if n_li == 1:
-        # Single Li: remove it directly, no vacancy enumeration needed
-        return atoms.remove_site_by_index(li_indices[0])
+        result = atoms.remove_site_by_index(li_indices[0])
+        return result, li_indices[0], {
+            "n_candidates": 1,
+            "candidate_energies": [],
+            "selected_energy": None,
+        }
 
-    # Multiple Li sites: enumerate Wyckoff-inequivalent vacancies and rank by energy
     vac = Vacancy(atoms=atoms)
     defects = vac.generate_defects(enforce_c_size=0.0, extend=1)
     li_defects = [d for d in defects if d._symbol == "Li"]
 
     if not li_defects:
-        # Fallback: remove the first Li
         warnings.warn(
             "Vacancy enumeration returned no Li defects; removing first Li atom."
         )
-        return atoms.remove_site_by_index(li_indices[0])
+        result = atoms.remove_site_by_index(li_indices[0])
+        return result, li_indices[0], {
+            "n_candidates": 0,
+            "candidate_energies": [],
+            "selected_energy": None,
+        }
 
     energies = [_alignn_energy(d._defect_structure) for d in li_defects]
-    best = li_defects[energies.index(min(energies))]
-    return best._defect_structure
+    best_idx = energies.index(min(energies))
+    best = li_defects[best_idx]
+
+    return best._defect_structure, best._defect_index, {
+        "n_candidates": len(li_defects),
+        "candidate_energies": energies,
+        "selected_energy": energies[best_idx],
+    }
+
+
+def get_delithiated_structure(atoms):
+    """Return the lowest-energy single-Li-vacancy structure.
+
+    Backward-compatible wrapper around get_next_vacancy().
+    """
+    structure, _, _ = get_next_vacancy(atoms)
+    return structure
 
 
 # ---------------------------------------------------------------------------
@@ -225,123 +315,780 @@ def _write_poscar(directory: Path, atoms) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Main entry point
+# Supercell helpers
 # ---------------------------------------------------------------------------
 
 _DEFAULT_OUTPUT_DIR = Path(__file__).parent / "dft_inputs"
 
 
-def generate_inputs(
-    jids: List[str],
-    output_dir: Optional[str] = None,
-    dft3d_df=None,
-) -> List[str]:
-    """Generate 4 VASP input directories per JID for DFT validation.
+def _min_supercell_dim(atoms, min_length: float = 7.0) -> List[int]:
+    """Compute smallest supercell dimensions so all lattice vectors >= min_length."""
+    import math
+    lattice = np.array(atoms.lattice_mat)
+    norms = np.linalg.norm(lattice, axis=1)
+    return [max(1, math.ceil(min_length / n)) for n in norms]
 
-    Directory layout per JID:
-        <output_dir>/<JID>/
-            1_pbe_relax_lithiated/   POSCAR INCAR KPOINTS POTCAR_spec
-            2_pbe_relax_delithiated/ POSCAR INCAR KPOINTS POTCAR_spec
-            3_tmbj_static_lithiated/ POSCAR INCAR KPOINTS POTCAR_spec README
-            4_tmbj_static_delithiated/ POSCAR INCAR KPOINTS POTCAR_spec README
 
-    Args:
-        jids:       List of JARVIS JIDs to process.
-        output_dir: Root directory for output. Defaults to
-                    batterymat/screening_cathode/dft_inputs/.
-        dft3d_df:   Pre-loaded JARVIS-DFT DataFrame. Fetched from figshare if None.
+def _afm_magmom(atoms) -> List[float]:
+    """Generate an AFM MAGMOM list for any structure."""
+    magmom = []
+    sign = 1
+    for el in atoms.elements:
+        mag = _DEFAULT_MAGMOM.get(el, 0.0)
+        if mag != 0.0:
+            magmom.append(sign * mag)
+            sign *= -1
+        else:
+            magmom.append(0.0)
+    return magmom
 
-    Returns:
-        List of JID-level directory paths that were successfully created.
+
+def _supercell_magmom(supercell, primitive, primitive_magmom, dim):
+    """Map each supercell atom to its primitive-cell equivalent and assign MAGMOM."""
+    prim_frac = np.array(primitive.frac_coords)
+    sup_frac = np.array(supercell.frac_coords)
+    dim_arr = np.array(dim, dtype=float)
+
+    magmom = []
+    for i, sf in enumerate(sup_frac):
+        pf = (sf * dim_arr) % 1.0
+        diffs = pf - prim_frac
+        diffs = diffs - np.round(diffs)
+        dists = np.linalg.norm(diffs, axis=1)
+        nearest = np.argmin(dists)
+        if supercell.elements[i] != primitive.elements[nearest]:
+            raise ValueError(
+                f"Supercell atom {i} ({supercell.elements[i]}) mapped to "
+                f"primitive atom {nearest} ({primitive.elements[nearest]}) — "
+                f"element mismatch. Check supercell construction."
+            )
+        magmom.append(primitive_magmom[nearest])
+    return magmom
+
+
+def _magmom_string(magmom_list):
+    """Convert a MAGMOM list to compressed VASP format."""
+    if not magmom_list:
+        return ""
+    groups = []
+    current = magmom_list[0]
+    count = 1
+    for val in magmom_list[1:]:
+        if val == current:
+            count += 1
+        else:
+            groups.append((count, current))
+            current = val
+            count = 1
+    groups.append((count, current))
+
+    parts = []
+    for count, val in groups:
+        if val == int(val):
+            val_str = str(int(val))
+        else:
+            val_str = str(val)
+        if count == 1:
+            parts.append(val_str)
+        else:
+            parts.append(f"{count}*{val_str}")
+    return " ".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# energies.json helpers
+# ---------------------------------------------------------------------------
+
+def _energies_path(supercell_dir: str) -> Path:
+    return Path(supercell_dir) / "energies.json"
+
+
+def _load_energies(supercell_dir: str) -> dict:
+    p = _energies_path(supercell_dir)
+    if not p.exists():
+        raise FileNotFoundError(f"No energies.json in {supercell_dir}")
+    return json.loads(p.read_text())
+
+
+def _save_energies(supercell_dir: str, data: dict) -> None:
+    _energies_path(supercell_dir).write_text(
+        json.dumps(data, indent=2) + "\n"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Step directory parsing
+# ---------------------------------------------------------------------------
+
+_STEP_RE = re.compile(r"^step_(\d+)_Li(\d+)$")
+
+
+def _find_latest_step(supercell_dir: str) -> Optional[Path]:
+    """Find the latest step_XX_LiYY directory in supercell_dir."""
+    sup = Path(supercell_dir)
+    steps = []
+    for d in sup.iterdir():
+        if d.is_dir():
+            m = _STEP_RE.match(d.name)
+            if m:
+                steps.append((int(m.group(1)), int(m.group(2)), d))
+    if not steps:
+        return None
+    steps.sort(key=lambda x: x[0])
+    return steps[-1][2]
+
+
+def _find_supercell_dir(jid: str, output_dir: Optional[str] = None) -> Optional[str]:
+    """Find the supercell_NxNxN directory for a JID.
+
+    Matches directories named exactly ``jid`` or ``jid-<suffix>``
+    (e.g. ``JVASP-144791-NMC``), so users can append abbreviations
+    for easier navigation without breaking the CLI.
     """
+    root = Path(output_dir) if output_dir else _DEFAULT_OUTPUT_DIR
+    if not root.exists():
+        return None
+    # Match directories named exactly `jid` or `jid-*` (abbreviated suffix)
+    candidates = [d for d in root.iterdir()
+                  if d.is_dir() and (d.name == jid or d.name.startswith(jid + "-"))]
+    if not candidates:
+        return None
+    if len(candidates) > 1:
+        raise ValueError(
+            f"Multiple directories match {jid}: {[d.name for d in candidates]}. "
+            f"Use --output-dir to specify."
+        )
+    jid_dir = candidates[0]
+    for d in jid_dir.iterdir():
+        if d.is_dir() and d.name.startswith("supercell_"):
+            return str(d)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Load primitive structure
+# ---------------------------------------------------------------------------
+
+def _load_primitive(jid: str, output_dir: Optional[str] = None, dft3d_df=None):
+    """Load primitive structure from existing POSCAR or JARVIS DB."""
     from jarvis.core.atoms import Atoms as JAtoms
 
     root = Path(output_dir) if output_dir else _DEFAULT_OUTPUT_DIR
+
+    # Try existing POSCAR in old dir 1 or in any supercell step_00
+    for poscar_path in [
+        root / jid / "1_pbe_relax_lithiated" / "POSCAR",
+    ]:
+        if poscar_path.exists():
+            from jarvis.io.vasp.inputs import Poscar
+            return Poscar.from_file(str(poscar_path)).atoms
+
+    # Try supercell step_00 POSCAR (already a supercell, not primitive)
+    # Fall through to DB lookup
+
+    if dft3d_df is not None:
+        import pandas as pd
+        jid_to_row = {row["jid"]: row for _, row in dft3d_df.iterrows()}
+        if jid in jid_to_row:
+            return JAtoms.from_dict(jid_to_row[jid]["atoms"])
+        return None
+
+    try:
+        from jarvis.db.figshare import data as jarvis_data
+        import pandas as pd
+        dft3d_df = pd.DataFrame(jarvis_data("dft_3d"))
+        jid_to_row = {row["jid"]: row for _, row in dft3d_df.iterrows()}
+        if jid in jid_to_row:
+            return JAtoms.from_dict(jid_to_row[jid]["atoms"])
+    except Exception as e:
+        print(f"WARNING: Cannot load {jid}: {e}")
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Sequential delithiation workflow
+# ---------------------------------------------------------------------------
+
+def generate_sequential_init(
+    jid: str,
+    output_dir: Optional[str] = None,
+    dft3d_df=None,
+    min_length: float = 7.0,
+    max_atoms: int = 300,
+    functional: str = "auto",
+) -> str:
+    """Create supercell directory with step_00 (fully lithiated).
+
+    Args:
+        jid:        JARVIS JID.
+        output_dir: Root output directory. Defaults to dft_inputs/.
+        dft3d_df:   Pre-loaded JARVIS-DFT DataFrame.
+        min_length: Minimum lattice vector length in Angstroms.
+        max_atoms:  Maximum allowed atoms in supercell. Dimensions are
+                    reduced if exceeded, with a warning.
+        functional: "auto", "pbe", or "optb88vdw". Auto-detects layered
+                    materials and uses optB88-vdW for them.
+
+    Returns:
+        Path to the supercell directory.
+    """
+    root = Path(output_dir) if output_dir else _DEFAULT_OUTPUT_DIR
     root.mkdir(parents=True, exist_ok=True)
 
+    # Load JARVIS DB once if not provided, so both functional resolution
+    # and primitive loading can use it.
     if dft3d_df is None:
         try:
             from jarvis.db.figshare import data as jarvis_data
             import pandas as pd
             dft3d_df = pd.DataFrame(jarvis_data("dft_3d"))
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to fetch JARVIS-DFT dataset: {e}. "
-                "Provide dft3d_df directly."
-            ) from e
+        except Exception:
+            pass  # Fall through — _load_primitive has its own local-file fallback
 
-    jid_to_row = {row["jid"]: row for _, row in dft3d_df.iterrows()}
-    created = []
+    resolved_functional = _resolve_functional(jid, dft3d_df, functional)
 
-    for jid in jids:
-        if jid not in jid_to_row:
-            print(f"WARNING: {jid} not found in JARVIS-DFT dataset — skipping.", file=sys.stdout)
+    prim_atoms = _load_primitive(jid, output_dir=output_dir, dft3d_df=dft3d_df)
+    if prim_atoms is None:
+        raise ValueError(f"{jid} not found in JARVIS-DFT dataset or local files.")
+
+    if "Li" not in prim_atoms.elements:
+        raise ValueError(f"{jid} has no Li atoms.")
+
+    dim = _min_supercell_dim(prim_atoms, min_length=min_length)
+
+    # Cap supercell size to max_atoms
+    n_prim = len(prim_atoms.elements)
+    lattice = np.array(prim_atoms.lattice_mat)
+    norms_prim = np.linalg.norm(lattice, axis=1)
+    reduced = False
+    while n_prim * dim[0] * dim[1] * dim[2] > max_atoms and any(d > 1 for d in dim):
+        # Reduce the axis with the largest multiplier; break ties by shortest vector
+        max_d = max(d for d in dim if d > 1)
+        candidates = [i for i, d in enumerate(dim) if d == max_d]
+        # Among ties, pick the axis with shortest primitive vector (least impact)
+        reduce_i = min(candidates, key=lambda i: norms_prim[i])
+        dim[reduce_i] -= 1
+        reduced = True
+
+    if reduced:
+        actual_atoms = n_prim * dim[0] * dim[1] * dim[2]
+        warnings.warn(
+            f"{jid}: supercell reduced to {'x'.join(str(d) for d in dim)} "
+            f"({actual_atoms} atoms) to stay within max_atoms={max_atoms}. "
+            f"Dilute vacancy limit may be compromised."
+        )
+
+    dim_str = "x".join(str(d) for d in dim)
+
+    # Build supercell
+    if dim == [1, 1, 1]:
+        sup_atoms = prim_atoms
+    else:
+        sup_atoms = prim_atoms.make_supercell(dim)
+
+    n_atoms = len(sup_atoms.elements)
+    n_li = sum(1 for el in sup_atoms.elements if el == "Li")
+    unique_elements = list(dict.fromkeys(sup_atoms.elements))
+
+    # Generate AFM MAGMOM
+    prim_magmom = _afm_magmom(prim_atoms)
+    if dim == [1, 1, 1]:
+        magmom = prim_magmom
+    else:
+        magmom = _supercell_magmom(sup_atoms, prim_atoms, prim_magmom, dim)
+
+    # KPOINTS scaled inversely
+    sup_kmesh = [max(1, round(3 / d)) for d in dim]
+    kmesh_str = " ".join(str(k) for k in sup_kmesh)
+
+    # NSW scales with atom count
+    nsw = min(300, max(200, n_atoms * 2))
+
+    # Create directory
+    jid_dir = root / jid
+    sup_dir = jid_dir / f"supercell_{dim_str}"
+    step_dir = sup_dir / f"step_00_Li{n_li}"
+    step_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write VASP inputs: ISIF=3 for step 0 (full relaxation)
+    _write_poscar(step_dir, sup_atoms)
+    write_relax_incar(
+        step_dir, elements=unique_elements,
+        isif=3, nsw=nsw,
+        magmom_str=_magmom_string(magmom),
+        functional=resolved_functional,
+    )
+    write_kpoints(step_dir, mesh=kmesh_str)
+    write_potcar_spec(step_dir, unique_elements)
+
+    # Initialize energies.json
+    layered = _is_layered(jid, dft3d_df)
+    energies_data = {
+        "jid": jid,
+        "dim": dim,
+        "n_li_total": n_li,
+        "functional": resolved_functional,
+        "layered": layered,
+        "e_li_metal": _E_LI_METAL[resolved_functional],
+        "steps": [
+            {"step": 0, "n_li": n_li, "energy": None, "removed_li_index": None},
+        ],
+    }
+    _save_energies(str(sup_dir), energies_data)
+
+    # Print info
+    lattice = np.array(sup_atoms.lattice_mat)
+    norms = np.linalg.norm(lattice, axis=1)
+    print(f"{jid}: supercell {dim_str} ({n_atoms} atoms, {n_li} Li)")
+    print(f"  Functional: {resolved_functional}")
+    print(f"  Lattice: {norms[0]:.2f}, {norms[1]:.2f}, {norms[2]:.2f} Å")
+    print(f"  KPOINTS: {kmesh_str}")
+    print(f"  -> {step_dir}")
+
+    return str(sup_dir)
+
+
+def generate_next_step(supercell_dir: str) -> Optional[str]:
+    """Generate VASP inputs for the next delithiation step.
+
+    Reads CONTCAR from the latest step, removes one Li via ALIGNN-ranked
+    vacancy selection, and creates the next step directory.
+
+    Args:
+        supercell_dir: Path to supercell_NxNxN directory.
+
+    Returns:
+        Path to the new step directory, or None if no Li remain.
+    """
+    from jarvis.io.vasp.inputs import Poscar
+
+    sup = Path(supercell_dir)
+    latest = _find_latest_step(supercell_dir)
+    if latest is None:
+        raise FileNotFoundError(f"No step directories found in {supercell_dir}")
+
+    m = _STEP_RE.match(latest.name)
+    current_step = int(m.group(1))
+    current_n_li = int(m.group(2))
+
+    if current_n_li == 0:
+        print("No Li remaining — sequential delithiation complete.")
+        return None
+
+    # Read relaxed structure from CONTCAR (check results/ subdirectory first)
+    contcar = latest / "results" / "CONTCAR"
+    if not contcar.exists():
+        contcar = latest / "CONTCAR"
+    if not contcar.exists():
+        raise FileNotFoundError(
+            f"No CONTCAR in {latest} or {latest}/results/. "
+            f"Run DFT for step {current_step} first."
+        )
+    atoms = Poscar.from_file(str(contcar)).atoms
+
+    # Verify Li count
+    actual_li = sum(1 for el in atoms.elements if el == "Li")
+    if actual_li != current_n_li:
+        warnings.warn(
+            f"Expected {current_n_li} Li in CONTCAR but found {actual_li}."
+        )
+
+    if actual_li == 0:
+        print("No Li remaining in CONTCAR — sequential delithiation complete.")
+        return None
+
+    # Remove one Li via ALIGNN-ranked vacancy selection
+    defect_atoms, removed_idx, info = get_next_vacancy(atoms)
+    new_n_li = actual_li - 1
+    new_step = current_step + 1
+
+    # Create new step directory
+    step_dir = sup / f"step_{new_step:02d}_Li{new_n_li}"
+    step_dir.mkdir(parents=True, exist_ok=True)
+
+    n_atoms = len(defect_atoms.elements)
+    unique_elements = list(dict.fromkeys(defect_atoms.elements))
+
+    nsw = min(300, max(200, n_atoms * 2))
+    magmom = _afm_magmom(defect_atoms)
+
+    # Read functional and layered flag from energies.json
+    data = _load_energies(supercell_dir)
+    step_functional = data.get("functional", "pbe")
+    # Backward compat: if "layered" key missing, infer from functional
+    is_layered = data.get("layered", step_functional == "optb88vdw")
+    # ISIF=3 for layered (cell shape changes on delithiation), ISIF=2 otherwise
+    isif = 3 if is_layered else 2
+
+    _write_poscar(step_dir, defect_atoms)
+    write_relax_incar(
+        step_dir, elements=unique_elements,
+        isif=isif, nsw=nsw,
+        magmom_str=_magmom_string(magmom),
+        functional=step_functional,
+    )
+
+    # Read KPOINTS mesh from previous step
+    prev_kpoints = latest / "KPOINTS"
+    if prev_kpoints.exists():
+        kp_lines = prev_kpoints.read_text().strip().split("\n")
+        mesh = kp_lines[3] if len(kp_lines) > 3 else "3 3 3"
+    else:
+        mesh = "3 3 3"
+    write_kpoints(step_dir, mesh=mesh)
+    write_potcar_spec(step_dir, unique_elements)
+
+    # Update energies.json (data already loaded above for functional)
+    data["steps"].append({
+        "step": new_step,
+        "n_li": new_n_li,
+        "energy": None,
+        "removed_li_index": removed_idx,
+    })
+    _save_energies(supercell_dir, data)
+
+    # Print info
+    print(f"Step {new_step}: {actual_li} -> {new_n_li} Li ({n_atoms} atoms)")
+    print(f"  Removed Li atom index: {removed_idx}")
+    if info["candidate_energies"]:
+        e_str = ", ".join(f"{e:.4f}" for e in info["candidate_energies"])
+        print(f"  Candidate energies: [{e_str}]")
+    print(f"  -> {step_dir}")
+
+    return str(step_dir)
+
+
+# ---------------------------------------------------------------------------
+# Energy recording
+# ---------------------------------------------------------------------------
+
+def _read_outcar_energy(step_dir: Path) -> Optional[float]:
+    """Parse final total energy from OUTCAR in results/ subdirectory."""
+    outcar = step_dir / "results" / "OUTCAR"
+    if not outcar.exists():
+        return None
+    energy = None
+    for line in outcar.open():
+        if "free  energy   TOTEN" in line:
+            try:
+                energy = float(line.split()[-2])
+            except (IndexError, ValueError):
+                pass
+    return energy
+
+
+def record_energy(
+    supercell_dir: str,
+    step: int,
+    energy: Optional[float] = None,
+) -> dict:
+    """Record a DFT total energy for a completed step.
+
+    Args:
+        supercell_dir: Path to supercell_NxNxN directory.
+        step:          Step number (0, 1, 2, ...).
+        energy:        DFT total energy in eV. If None, reads from
+                       results/OUTCAR in the step directory.
+
+    Returns:
+        Updated energies dict.
+    """
+    data = _load_energies(supercell_dir)
+
+    if energy is None:
+        # Auto-read from results/OUTCAR
+        n_li = None
+        for entry in data["steps"]:
+            if entry["step"] == step:
+                n_li = entry["n_li"]
+                break
+        if n_li is None:
+            raise ValueError(
+                f"Step {step} not found in energies.json. "
+                f"Available steps: {[s['step'] for s in data['steps']]}"
+            )
+        step_dir = None
+        for d in Path(supercell_dir).iterdir():
+            if d.is_dir() and d.name == f"step_{step:02d}_Li{n_li}":
+                step_dir = d
+                break
+        if step_dir is None:
+            raise FileNotFoundError(f"No directory found for step {step} in {supercell_dir}")
+        energy = _read_outcar_energy(step_dir)
+        if energy is None:
+            raise FileNotFoundError(
+                f"No results/OUTCAR found in {step_dir}. "
+                f"Supply energy explicitly or place DFT outputs in results/."
+            )
+    found = False
+    for entry in data["steps"]:
+        if entry["step"] == step:
+            entry["energy"] = energy
+            found = True
+            break
+    if not found:
+        raise ValueError(
+            f"Step {step} not found in energies.json. "
+            f"Available steps: {[s['step'] for s in data['steps']]}"
+        )
+    _save_energies(supercell_dir, data)
+    print(f"Recorded energy for step {step}: {energy:.6f} eV")
+    return data
+
+
+# ---------------------------------------------------------------------------
+# Voltage curve computation
+# ---------------------------------------------------------------------------
+
+def compute_voltage_curve(
+    supercell_dir: str,
+    plot: bool = True,
+    e_li_metal: Optional[float] = None,
+) -> List[Dict]:
+    """Compute voltage curve from recorded energies.
+
+    Calculates both step voltages (raw, between consecutive steps) and
+    convex hull equilibrium voltages.
+
+    Args:
+        supercell_dir: Path to supercell_NxNxN directory.
+        plot:          If True, save voltage_curve.png.
+        e_li_metal:    DFT energy of Li metal per atom (eV/atom).
+                       If None, reads from energies.json.
+
+    Returns:
+        List of dicts with keys: x (Li fraction), n_li, voltage.
+    """
+    data = _load_energies(supercell_dir)
+    n_li_total = data["n_li_total"]
+
+    # Resolve e_li_metal: CLI arg > energies.json > default PBE
+    if e_li_metal is None:
+        e_li_metal = data.get("e_li_metal")
+    if e_li_metal is None:
+        raise ValueError(
+            f"No e_li_metal available. For optB88-vdW, supply --e-li-metal "
+            f"once the Li metal reference energy is computed."
+        )
+
+    # Collect steps with recorded energies, sort by n_li descending
+    recorded = [s for s in data["steps"] if s["energy"] is not None]
+    if len(recorded) < 2:
+        raise ValueError(
+            f"Need at least 2 recorded energies, have {len(recorded)}."
+        )
+    recorded.sort(key=lambda s: s["n_li"], reverse=True)
+
+    # Step voltages: V = -(E_low - E_high) / delta_n - e_li_metal
+    results = []
+    for i in range(len(recorded) - 1):
+        hi = recorded[i]
+        lo = recorded[i + 1]
+        dn = hi["n_li"] - lo["n_li"]
+        if dn <= 0:
             continue
+        v = -(lo["energy"] - hi["energy"]) / dn - e_li_metal
+        x = lo["n_li"] / n_li_total
+        results.append({
+            "x": x,
+            "n_li": lo["n_li"],
+            "voltage": v,
+            "n_li_from": hi["n_li"],
+        })
 
-        row = jid_to_row[jid]
-        lith_atoms = JAtoms.from_dict(row["atoms"])
-        unique_elements = list(dict.fromkeys(lith_atoms.elements))
+    # Convex hull on formation energies
+    # dE(x) = E(x) - x*E(fully_lith) - (1-x)*E(fully_delith)
+    # where x = n_li / n_li_total
+    e_full = None
+    e_empty = None
+    for s in recorded:
+        if s["n_li"] == n_li_total:
+            e_full = s["energy"]
+        if s["n_li"] == 0:
+            e_empty = s["energy"]
 
-        # Check for Li
-        if "Li" not in lith_atoms.elements:
-            print(f"WARNING: {jid} has no Li atoms — skipping.", file=sys.stdout)
-            continue
+    hull_voltages = []
+    if e_full is not None and e_empty is not None:
+        # Compute formation energies
+        points = []  # (x, E, formation_energy)
+        for s in recorded:
+            x = s["n_li"] / n_li_total
+            fe = s["energy"] - x * e_full - (1 - x) * e_empty
+            points.append((x, s["n_li"], s["energy"], fe))
+        points.sort(key=lambda p: p[0], reverse=True)
 
-        # Generate delithiated structure
+        # Lower convex hull: start from x=1, greedily pick the point that
+        # gives the lowest (most negative) formation energy per unit x
+        hull = [points[0]]  # x=1 (fully lithiated)
+        for p in points[1:]:
+            # Remove points that are above the line from hull[-1] to p
+            while len(hull) > 1:
+                # Check if hull[-1] is above line from hull[-2] to p
+                x0, _, _, fe0 = hull[-2]
+                x1, _, _, fe1 = hull[-1]
+                x2, _, _, fe2 = p
+                if x0 == x2:
+                    break
+                # Linear interpolation of fe at x1 between x0 and x2
+                t = (x0 - x1) / (x0 - x2)
+                fe_interp = fe0 + t * (fe2 - fe0)
+                if fe1 <= fe_interp + 1e-10:
+                    break
+                hull.pop()
+            hull.append(p)
+
+        # Hull voltages connect consecutive hull vertices
+        for i in range(len(hull) - 1):
+            x_hi, nli_hi, e_hi, _ = hull[i]
+            x_lo, nli_lo, e_lo, _ = hull[i + 1]
+            dn = nli_hi - nli_lo
+            if dn <= 0:
+                continue
+            v = -(e_lo - e_hi) / dn - e_li_metal
+            hull_voltages.append({
+                "x_from": x_hi,
+                "x_to": x_lo,
+                "voltage": v,
+            })
+
+    if plot:
         try:
-            delith_atoms = get_delithiated_structure(lith_atoms)
-        except Exception as e:
-            print(f"WARNING: Failed to generate delithiated structure for {jid}: {e} — skipping.", file=sys.stdout)
-            continue
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
 
-        delith_elements = list(dict.fromkeys(delith_atoms.elements))
-        jid_dir = root / jid
-        jid_dir.mkdir(parents=True, exist_ok=True)
+            fig, ax = plt.subplots(figsize=(8, 5))
 
-        # --- Run 1: PBE relax, lithiated ---
-        run1 = jid_dir / "1_pbe_relax_lithiated"
-        run1.mkdir(exist_ok=True)
-        _write_poscar(run1, lith_atoms)
-        write_pbe_relax_incar(run1)
-        write_kpoints(run1)
-        write_potcar_spec(run1, unique_elements)
+            # Step voltages as staircase
+            if results:
+                xs = [1.0]  # start at full lithiation
+                vs = [results[0]["voltage"]]
+                for r in results:
+                    xs.extend([r["n_li_from"] / n_li_total, r["x"]])
+                    vs.extend([r["voltage"], r["voltage"]])
+                ax.plot(xs, vs, "b-", linewidth=1.5, label="Step voltage")
 
-        # --- Run 2: PBE relax, delithiated ---
-        run2 = jid_dir / "2_pbe_relax_delithiated"
-        run2.mkdir(exist_ok=True)
-        _write_poscar(run2, delith_atoms)
-        write_pbe_relax_incar(run2)
-        write_kpoints(run2)
-        write_potcar_spec(run2, delith_elements)
+            # Convex hull voltage
+            if hull_voltages:
+                hx = []
+                hv = []
+                for hv_entry in hull_voltages:
+                    hx.extend([hv_entry["x_from"], hv_entry["x_to"]])
+                    hv.extend([hv_entry["voltage"], hv_entry["voltage"]])
+                ax.plot(hx, hv, "r--", linewidth=2, label="Equilibrium (hull)")
 
-        # --- Run 3: TB-mBJ static, lithiated ---
-        run3 = jid_dir / "3_tmbj_static_lithiated"
-        run3.mkdir(exist_ok=True)
-        _write_poscar(run3, lith_atoms)  # user replaces with CONTCAR from run1
-        write_tmbj_static_incar(run3)
-        write_kpoints(run3)
-        write_potcar_spec(run3, unique_elements)
-        write_tmbj_readme(run3, run1)
+            ax.set_xlabel("x in Li$_x$MO")
+            ax.set_ylabel("Voltage (V)")
+            ax.set_title(f"Voltage curve — {data['jid']}")
+            ax.legend()
+            ax.set_xlim(-0.05, 1.05)
+            fig.tight_layout()
+            fig.savefig(str(Path(supercell_dir) / "voltage_curve.png"), dpi=150)
+            plt.close(fig)
+            print(f"Saved voltage_curve.png in {supercell_dir}")
+        except ImportError:
+            print("matplotlib not available — skipping plot.")
 
-        # --- Run 4: TB-mBJ static, delithiated ---
-        run4 = jid_dir / "4_tmbj_static_delithiated"
-        run4.mkdir(exist_ok=True)
-        _write_poscar(run4, delith_atoms)  # user replaces with CONTCAR from run2
-        write_tmbj_static_incar(run4)
-        write_kpoints(run4)
-        write_potcar_spec(run4, delith_elements)
-        write_tmbj_readme(run4, run2)
+    return results
 
-        print(f"Generated DFT inputs for {jid} in {jid_dir}")
-        created.append(str(jid_dir))
 
-    return created
+# ---------------------------------------------------------------------------
+# Deprecated: old workflows
+# ---------------------------------------------------------------------------
+
+def generate_supercell_inputs(*args, **kwargs):
+    """Deprecated: use generate_sequential_init() instead."""
+    raise DeprecationWarning(
+        "generate_supercell_inputs() is removed. "
+        "Use: python dft_prep.py init JVASP-XXXXX"
+    )
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def _cli():
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Sequential supercell delithiation for voltage curves."
+    )
+    sub = parser.add_subparsers(dest="command")
+
+    # init
+    p_init = sub.add_parser("init", help="Initialize supercell + step_00")
+    p_init.add_argument("jids", nargs="+", help="JARVIS JIDs")
+    p_init.add_argument("--output-dir", default=None)
+    p_init.add_argument("--min-length", type=float, default=7.0)
+    p_init.add_argument("--max-atoms", type=int, default=300,
+                        help="Max atoms in supercell (default: 300)")
+    p_init.add_argument("--functional", choices=["auto", "pbe", "optb88vdw"],
+                        default="auto",
+                        help="DFT functional (default: auto-detect)")
+
+    # next
+    p_next = sub.add_parser("next", help="Generate next step from CONTCAR")
+    p_next.add_argument("jid", help="JARVIS JID")
+    p_next.add_argument("--output-dir", default=None)
+
+    # record
+    p_rec = sub.add_parser("record", help="Record DFT energy for a step")
+    p_rec.add_argument("jid", help="JARVIS JID")
+    p_rec.add_argument("step", type=int, help="Step number")
+    p_rec.add_argument("energy", type=float, nargs="?", default=None,
+                        help="DFT total energy (eV). If omitted, reads from results/OUTCAR")
+    p_rec.add_argument("--output-dir", default=None)
+
+    # voltage
+    p_volt = sub.add_parser("voltage", help="Compute + plot voltage curve")
+    p_volt.add_argument("jid", help="JARVIS JID")
+    p_volt.add_argument("--output-dir", default=None)
+    p_volt.add_argument("--no-plot", action="store_true")
+    p_volt.add_argument("--e-li-metal", type=float, default=None,
+                        help="Li metal energy (eV/atom). Default: read from energies.json")
+
+    args = parser.parse_args()
+
+    if args.command == "init":
+        for jid in args.jids:
+            generate_sequential_init(
+                jid, output_dir=args.output_dir,
+                min_length=args.min_length,
+                max_atoms=args.max_atoms,
+                functional=args.functional,
+            )
+
+    elif args.command == "next":
+        sup_dir = _find_supercell_dir(args.jid, args.output_dir)
+        if sup_dir is None:
+            print(f"ERROR: No supercell directory found for {args.jid}. Run 'init' first.")
+            sys.exit(1)
+        generate_next_step(sup_dir)
+
+    elif args.command == "record":
+        sup_dir = _find_supercell_dir(args.jid, args.output_dir)
+        if sup_dir is None:
+            print(f"ERROR: No supercell directory found for {args.jid}.")
+            sys.exit(1)
+        record_energy(sup_dir, args.step, args.energy)
+
+    elif args.command == "voltage":
+        sup_dir = _find_supercell_dir(args.jid, args.output_dir)
+        if sup_dir is None:
+            print(f"ERROR: No supercell directory found for {args.jid}.")
+            sys.exit(1)
+        results = compute_voltage_curve(
+            sup_dir, plot=not args.no_plot,
+            e_li_metal=args.e_li_metal,
+        )
+        for r in results:
+            print(f"  x={r['x']:.3f}  n_li={r['n_li']}  V={r['voltage']:.4f}")
+
+    else:
+        parser.print_help()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(description="Generate VASP DFT inputs for cathode candidates.")
-    parser.add_argument("jids", nargs="+", help="JARVIS JIDs to process (e.g. JVASP-1234)")
-    parser.add_argument("--output-dir", default=None, help="Output directory (default: dft_inputs/)")
-    args = parser.parse_args()
-    generate_inputs(args.jids, output_dir=args.output_dir)
+    _cli()
