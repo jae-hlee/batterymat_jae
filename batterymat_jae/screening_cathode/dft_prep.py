@@ -9,8 +9,8 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-# Module-level import so tests can patch batterymat.screening_cathode.dft_prep.Vacancy
-from jarvis.analysis.defects.vacancy import Vacancy
+# Vacancy import kept for backward compatibility but no longer used internally.
+from jarvis.analysis.defects.vacancy import Vacancy  # noqa: F401
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +46,9 @@ _JARVIS_PAW = _load_jarvis_paw()
 
 # ---------------------------------------------------------------------------
 # Hubbard U values (Dudarev, LDAUTYPE=2)
-# Per-element values — JARVIS only supports uniform U, so we maintain these.
+# From Materials Project: https://docs.materialsproject.org/methodology/
+# materials-methodology/calculation-details/gga+u-calculations/hubbard-u-values
+# JARVIS only supports uniform U, so we maintain element-specific values here.
 # ---------------------------------------------------------------------------
 _HUBBARD_U = {
     "Mn": 3.9,
@@ -65,9 +67,41 @@ LUSE_VDW = .TRUE.
 AGGAC = 0.0
 """
 
+_TMBJ_INCAR = """\
+IBRION = -1
+NSW = 0
+ENCUT = 520
+EDIFF = 1E-6
+PREC = Accurate
+ISMEAR = 0
+SIGMA = 0.05
+METAGGA = MBJ
+LASPH = .TRUE.
+ICHARG = 2
+ALGO = All
+TIME = 0.4
+LORBIT = 11
+NEDOS = 2000
+NELM = 1000
+AMIX = 0.02
+BMIX = 0.001
+AMIN = 0.01
+LWAVE = .TRUE.
+LCHARG = .TRUE.
+ISPIN = 2
+LMAXMIX = 4
+ISTART = 0
+ISYM = 0
+NCORE = 8
+"""
+
 _E_LI_METAL = {
-    "pbe": -0.925,
-    "optb88vdw": -0.92188,  # JARVIS JVASP-14616 optB88-vdW
+    # Reference Li metal energies, computed in-house with the SAME PAW (Li_sv),
+    # ENCUT=520, ISMEAR=1, SIGMA=0.1, k=17x17x17 as the cathode runs.
+    # See dft_inputs/Li_sv_PBE/ and dft_inputs/Li_sv/ (optB88-vdW).
+    # The old JARVIS value (-0.925) used a different PAW/basis and was wrong by ~1 eV.
+    "pbe": -1.9031,
+    "optb88vdw": -0.9778,
 }
 
 _LAYERED_SPACEGROUPS = {
@@ -78,28 +112,33 @@ _LAYERED_SPACEGROUPS = {
 }
 
 _PBE_INCAR = """\
-IBRION = 2
+IBRION = 1
 NSW = 100
 ISIF = 3
 ENCUT = 520
-EDIFF = 1E-6
-EDIFFG = -0.03
+EDIFF = 1E-4
 PREC = Accurate
 ISMEAR = 0
 SIGMA = 0.05
 LWAVE = .TRUE.
 LCHARG = .TRUE.
-NELM = 500
+NELM = 100
+NELMIN = 4
 ISPIN = 2
 LASPH = .TRUE.
 LMAXMIX = 4
-ISTART = 0
+ISTART = 1
+ICHARG = 1
 ISYM = 0
 LORBIT = 11
 LREAL = Auto
 NCORE = 8
 KPAR = 2
 NSIM = 8
+AMIX = 0.2
+BMIX = 0.0001
+AMIX_MAG = 0.4
+BMIX_MAG = 0.0001
 """
 
 _DEFAULT_MAGMOM = {
@@ -163,7 +202,7 @@ def _resolve_functional(jid: str, dft3d_df=None, functional: str = "auto") -> st
 # ---------------------------------------------------------------------------
 
 def _hubbard_u_lines(elements: List[str]) -> str:
-    """Generate LDAU INCAR lines for elements that have MP Hubbard U values."""
+    """Generate LDAU INCAR lines for elements that have Hubbard U values."""
     needs_u = any(el in _HUBBARD_U for el in elements)
     if not needs_u:
         return ""
@@ -210,6 +249,19 @@ def write_pbe_relax_incar(directory, elements: List[str] = None,
                       magmom_str=magmom_str, functional="pbe")
 
 
+def write_tmbj_incar(directory, elements: List[str] = None,
+                     magmom_str: str = None) -> None:
+    """Write TB-mBJ static INCAR to directory.
+
+    Uses ICHARG=2 (atomic superposition) so MAGMOM is respected.
+    No DFT+U — MBJ is a separate functional.
+    """
+    content = _TMBJ_INCAR
+    if magmom_str:
+        content += f"MAGMOM = {magmom_str}\n"
+    Path(directory, "INCAR").write_text(content)
+
+
 def write_kpoints(directory, mesh: str = "3 3 3") -> None:
     """Write a Gamma-centered KPOINTS to directory."""
     content = f"Automatic mesh\n0\nGamma\n{mesh}\n0 0 0\n"
@@ -247,6 +299,10 @@ def _alignn_energy(atoms) -> float:
 def get_next_vacancy(atoms) -> Tuple:
     """Return the lowest-energy single-Li-vacancy structure with metadata.
 
+    Evaluates ALIGNN energy for every Li vacancy (no Wyckoff deduplication)
+    to ensure the best site is selected even after symmetry is broken by
+    prior vacancies.
+
     Args:
         atoms: jarvis.core.atoms.Atoms object.
 
@@ -268,29 +324,22 @@ def get_next_vacancy(atoms) -> Tuple:
             "selected_energy": None,
         }
 
-    vac = Vacancy(atoms=atoms)
-    defects = vac.generate_defects(enforce_c_size=0.0, extend=1)
-    li_defects = [d for d in defects if d._symbol == "Li"]
+    # Evaluate every Li vacancy with ALIGNN — no Wyckoff deduplication
+    candidates = []
+    energies = []
+    for idx in li_indices:
+        defect = atoms.remove_site_by_index(idx)
+        e = _alignn_energy(defect)
+        candidates.append((defect, idx))
+        energies.append(e)
 
-    if not li_defects:
-        warnings.warn(
-            "Vacancy enumeration returned no Li defects; removing first Li atom."
-        )
-        result = atoms.remove_site_by_index(li_indices[0])
-        return result, li_indices[0], {
-            "n_candidates": 0,
-            "candidate_energies": [],
-            "selected_energy": None,
-        }
+    best_i = energies.index(min(energies))
+    best_defect, best_idx = candidates[best_i]
 
-    energies = [_alignn_energy(d._defect_structure) for d in li_defects]
-    best_idx = energies.index(min(energies))
-    best = li_defects[best_idx]
-
-    return best._defect_structure, best._defect_index, {
-        "n_candidates": len(li_defects),
+    return best_defect, best_idx, {
+        "n_candidates": len(li_indices),
         "candidate_energies": energies,
-        "selected_energy": energies[best_idx],
+        "selected_energy": energies[best_i],
     }
 
 
@@ -393,6 +442,42 @@ def _magmom_string(magmom_list):
         else:
             parts.append(f"{count}*{val_str}")
     return " ".join(parts)
+
+
+def _parse_magmom_string(magmom_str):
+    """Parse compressed VASP MAGMOM string back to a list of floats.
+
+    Inverse of ``_magmom_string()``.  Handles ``"16*0 4*5 4*-5 80*0"``
+    as well as bare values like ``"0 5 -5 0"``.
+    """
+    result = []
+    for token in magmom_str.split():
+        if "*" in token:
+            count_s, val_s = token.split("*", 1)
+            result.extend([float(val_s)] * int(count_s))
+        else:
+            result.append(float(token))
+    return result
+
+
+def _read_magmom_from_incar(incar_path):
+    """Read and parse the MAGMOM line from an INCAR file.
+
+    Returns a list of floats, or None if the file doesn't exist or has
+    no MAGMOM tag.
+    """
+    p = Path(incar_path)
+    if not p.exists():
+        return None
+    for line in p.read_text().splitlines():
+        stripped = line.strip()
+        if stripped.upper().startswith("MAGMOM"):
+            # MAGMOM = 16*0 4*5 ...
+            _, _, rhs = stripped.partition("=")
+            rhs = rhs.strip()
+            if rhs:
+                return _parse_magmom_string(rhs)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -710,7 +795,24 @@ def generate_next_step(supercell_dir: str) -> Optional[str]:
     unique_elements = list(dict.fromkeys(defect_atoms.elements))
 
     nsw = min(300, max(200, n_atoms * 2))
-    magmom = _afm_magmom(defect_atoms)
+
+    # Preserve MAGMOM from previous step's INCAR, dropping the removed Li entry
+    prev_magmom = _read_magmom_from_incar(latest / "INCAR")
+    if prev_magmom is not None and len(prev_magmom) == n_atoms + 1:
+        del prev_magmom[removed_idx]
+        magmom = prev_magmom
+    else:
+        if prev_magmom is not None:
+            warnings.warn(
+                f"Previous INCAR MAGMOM has {len(prev_magmom)} entries, "
+                f"expected {n_atoms + 1}. Falling back to _afm_magmom()."
+            )
+        else:
+            warnings.warn(
+                "No MAGMOM found in previous INCAR. "
+                "Falling back to _afm_magmom()."
+            )
+        magmom = _afm_magmom(defect_atoms)
 
     # Read functional and layered flag from energies.json
     data = _load_energies(supercell_dir)
@@ -756,6 +858,89 @@ def generate_next_step(supercell_dir: str) -> Optional[str]:
     print(f"  -> {step_dir}")
 
     return str(step_dir)
+
+
+# ---------------------------------------------------------------------------
+# TB-mBJ static generation
+# ---------------------------------------------------------------------------
+
+def generate_static(supercell_dir: str, step: int) -> str:
+    """Generate TB-mBJ static INCAR for a completed relaxation step.
+
+    Reads the CONTCAR from the specified step and writes TB-mBJ inputs
+    into a ``tmbj_step_XX_LiYY/`` directory alongside the relaxation step.
+
+    Args:
+        supercell_dir: Path to supercell_NxNxN directory.
+        step:          Step number whose relaxed structure to use.
+
+    Returns:
+        Path to the TB-mBJ directory.
+    """
+    from jarvis.io.vasp.inputs import Poscar
+
+    sup = Path(supercell_dir)
+    data = _load_energies(supercell_dir)
+
+    # Find the step entry
+    step_entry = None
+    for s in data["steps"]:
+        if s["step"] == step:
+            step_entry = s
+            break
+    if step_entry is None:
+        raise ValueError(
+            f"Step {step} not found in energies.json. "
+            f"Available steps: {[s['step'] for s in data['steps']]}"
+        )
+
+    n_li = step_entry["n_li"]
+    relax_dir = sup / f"step_{step:02d}_Li{n_li}"
+    if not relax_dir.exists():
+        raise FileNotFoundError(f"Relaxation directory not found: {relax_dir}")
+
+    # Read relaxed structure from CONTCAR
+    contcar = relax_dir / "results" / "CONTCAR"
+    if not contcar.exists():
+        contcar = relax_dir / "CONTCAR"
+    if not contcar.exists():
+        raise FileNotFoundError(
+            f"No CONTCAR in {relax_dir} or {relax_dir}/results/. "
+            f"Run DFT relaxation for step {step} first."
+        )
+    atoms = Poscar.from_file(str(contcar)).atoms
+
+    unique_elements = list(dict.fromkeys(atoms.elements))
+
+    # Preserve MAGMOM from relaxation step's INCAR (same atom count)
+    prev_magmom = _read_magmom_from_incar(relax_dir / "INCAR")
+    if prev_magmom is not None and len(prev_magmom) == len(atoms.elements):
+        magmom = prev_magmom
+    else:
+        magmom = _afm_magmom(atoms)
+
+    # Create TB-mBJ directory
+    tmbj_dir = sup / f"tmbj_step_{step:02d}_Li{n_li}"
+    tmbj_dir.mkdir(parents=True, exist_ok=True)
+
+    _write_poscar(tmbj_dir, atoms)
+    write_tmbj_incar(tmbj_dir, elements=unique_elements,
+                     magmom_str=_magmom_string(magmom))
+
+    # Read KPOINTS mesh from relaxation step
+    prev_kpoints = relax_dir / "KPOINTS"
+    if prev_kpoints.exists():
+        kp_lines = prev_kpoints.read_text().strip().split("\n")
+        mesh = kp_lines[3] if len(kp_lines) > 3 else "3 3 3"
+    else:
+        mesh = "3 3 3"
+    write_kpoints(tmbj_dir, mesh=mesh)
+    write_potcar_spec(tmbj_dir, unique_elements)
+
+    print(f"TB-mBJ static for step {step} (Li{n_li})")
+    print(f"  -> {tmbj_dir}")
+
+    return str(tmbj_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -879,7 +1064,9 @@ def compute_voltage_curve(
         )
     recorded.sort(key=lambda s: s["n_li"], reverse=True)
 
-    # Step voltages: V = -(E_low - E_high) / delta_n - e_li_metal
+    # Step voltages: V = (E_low - E_high) / delta_n + e_li_metal
+    # Derivation: reaction Li_lo + dn*Li(metal) -> Li_hi, dE = E_hi - E_lo - dn*mu_Li,
+    # V = -dE/dn = (E_lo - E_hi)/dn + mu_Li. With mu_Li negative, this lowers V.
     results = []
     for i in range(len(recorded) - 1):
         hi = recorded[i]
@@ -887,7 +1074,7 @@ def compute_voltage_curve(
         dn = hi["n_li"] - lo["n_li"]
         if dn <= 0:
             continue
-        v = -(lo["energy"] - hi["energy"]) / dn - e_li_metal
+        v = (lo["energy"] - hi["energy"]) / dn + e_li_metal
         x = lo["n_li"] / n_li_total
         results.append({
             "x": x,
@@ -944,7 +1131,7 @@ def compute_voltage_curve(
             dn = nli_hi - nli_lo
             if dn <= 0:
                 continue
-            v = -(e_lo - e_hi) / dn - e_li_metal
+            v = (e_lo - e_hi) / dn + e_li_metal
             hull_voltages.append({
                 "x_from": x_hi,
                 "x_to": x_lo,
@@ -1040,6 +1227,13 @@ def _cli():
                         help="DFT total energy (eV). If omitted, reads from results/OUTCAR")
     p_rec.add_argument("--output-dir", default=None)
 
+    # static
+    p_static = sub.add_parser("static", help="Generate TB-mBJ static inputs for a step")
+    p_static.add_argument("jid", help="JARVIS JID")
+    p_static.add_argument("steps", type=int, nargs="+",
+                          help="Step number(s) to generate TB-mBJ inputs for")
+    p_static.add_argument("--output-dir", default=None)
+
     # voltage
     p_volt = sub.add_parser("voltage", help="Compute + plot voltage curve")
     p_volt.add_argument("jid", help="JARVIS JID")
@@ -1072,6 +1266,14 @@ def _cli():
             print(f"ERROR: No supercell directory found for {args.jid}.")
             sys.exit(1)
         record_energy(sup_dir, args.step, args.energy)
+
+    elif args.command == "static":
+        sup_dir = _find_supercell_dir(args.jid, args.output_dir)
+        if sup_dir is None:
+            print(f"ERROR: No supercell directory found for {args.jid}.")
+            sys.exit(1)
+        for step in args.steps:
+            generate_static(sup_dir, step)
 
     elif args.command == "voltage":
         sup_dir = _find_supercell_dir(args.jid, args.output_dir)
