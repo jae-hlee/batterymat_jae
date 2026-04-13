@@ -133,6 +133,31 @@ The previous JARVIS value (`-0.925 eV/atom`) used a different PAW and basis set 
 - **NMC (layered):** PBE+U. Although NMC is layered, its spacegroup (R-3m) triggers optB88-vdW auto-detection. However, PBE was forced here because the NMC calculation was started before the auto-detection was implemented, and switching functional mid-run would invalidate the existing energy series. NMC interlayer bonding is partially ionic (mixed TM content) so PBE is acceptable.
 - **LCO (layered):** optB88-vdW. LiCoO₂ has a purely van der Waals bonded interlayer gap between CoO₂ slabs. PBE significantly overestimates the c-axis lattice parameter and interlayer spacing, which distorts the delithiation energetics. The vdW correction is essential for accurate voltage predictions in this material.
 
+### Periodic Trend Visualization (`periodic_trend/`)
+
+**Purpose:** Interactive periodic table that color-codes elements by aggregated properties from cathode screening CSVs. Shows per-element statistics across the candidate pool -- for example, mean voltage of all materials containing a given element, or how many candidates contain each element.
+
+**Usage (run from `periodic_trend/` directory):**
+```bash
+cd batterymat_jae/periodic_trend/
+python ptable.py cathode_candidates_ranked.csv -p avg_voltage           # Mean voltage per element
+python ptable.py cathode_candidates_ranked.csv --agg count              # Element frequency (71 candidates, 30 non-Li elements)
+python ptable.py cathode_candidates_ranked.csv -p max_grav_cap --agg max # Best capacity per element
+python ptable.py cathode_candidates_ranked.csv -p ehull --log -o ehull.html  # Log scale, custom output
+```
+
+**Arguments:**
+- `csv_path` -- positional: path to CSV (e.g. `cathode_candidates_ranked.csv`, `../../average_voltage/Li_min.csv`)
+- `-p` / `--property` -- column to aggregate: `avg_voltage`, `max_voltage`, `max_grav_cap`, `max_vol_cap`, `ehull`, `optb88vdw_bandgap`, `score` (required unless `--agg count`)
+- `--agg` -- aggregation function: `mean` (default), `median`, `max`, `min`, `count`
+- `--log` -- log color scale
+- `-o` / `--output` -- output HTML file (default: `ptable.html`)
+- `--include-li` -- include Li in the visualization (excluded by default since it appears in all 71 candidates and dominates the color scale)
+
+**Output:** Interactive HTML periodic table (Bokeh + Plasma colormap). Elements with data are color-coded by the aggregated property value; elements without data are grayed out. Hover tooltips show element name and value.
+
+**Dependencies:** `bokeh`, `bokeh_sampledata`, `matplotlib`.
+
 ### Stage 4: NEB Barriers (`neb_calc/`)
 
 **Purpose:** Nudged Elastic Band (NEB) calculations for ion migration barrier energies -- determines how easily ions can move through the crystal lattice.
@@ -173,6 +198,9 @@ batterymat_jae/
 │               ├── step_01_LiXX/
 │               ├── tmbj_step_00_LiXX/  (optional TB-mBJ static)
 │               └── ...
+├── periodic_trend/           # Interactive periodic table visualization
+│   ├── ptable.py             # CLI tool + plotting functions
+│   └── cathode_candidates_ranked.csv
 ├── neb_calc/                 # Stage 4: Ion migration barriers (NEB)
 └── benchmarks/               # Stage 5: Validation vs known materials
 tests/
