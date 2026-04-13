@@ -140,14 +140,14 @@ The previous JARVIS value (`-0.925 eV/atom`) used a different PAW and basis set 
 **Usage (run from `periodic_trend/` directory):**
 ```bash
 cd batterymat_jae/periodic_trend/
-python ptable.py cathode_candidates_ranked.csv -p avg_voltage           # Mean voltage per element
-python ptable.py cathode_candidates_ranked.csv --agg count              # Element frequency (71 candidates, 30 non-Li elements)
-python ptable.py cathode_candidates_ranked.csv -p max_grav_cap --agg max # Best capacity per element
-python ptable.py cathode_candidates_ranked.csv -p ehull --log -o ehull.html  # Log scale, custom output
+python ptable.py ../screening_cathode/cathode_candidates_ranked.csv -p avg_voltage           # Mean voltage per element
+python ptable.py ../screening_cathode/cathode_candidates_ranked.csv --agg count              # Element frequency (71 candidates, 30 non-Li elements)
+python ptable.py ../screening_cathode/cathode_candidates_ranked.csv -p max_grav_cap --agg max # Best capacity per element
+python ptable.py ../screening_cathode/cathode_candidates_ranked.csv -p ehull --log -o ehull.html  # Log scale, custom output
 ```
 
 **Arguments:**
-- `csv_path` -- positional: path to CSV (e.g. `cathode_candidates_ranked.csv`, `../../average_voltage/Li_min.csv`)
+- `csv_path` -- positional: path to CSV (e.g. `../screening_cathode/cathode_candidates_ranked.csv`, `../../average_voltage/Li_min.csv`)
 - `-p` / `--property` -- column to aggregate: `avg_voltage`, `max_voltage`, `max_grav_cap`, `max_vol_cap`, `ehull`, `optb88vdw_bandgap`, `score` (required unless `--agg count`)
 - `--agg` -- aggregation function: `mean` (default), `median`, `max`, `min`, `count`
 - `--log` -- log color scale
@@ -199,8 +199,7 @@ batterymat_jae/
 │               ├── tmbj_step_00_LiXX/  (optional TB-mBJ static)
 │               └── ...
 ├── periodic_trend/           # Interactive periodic table visualization
-│   ├── ptable.py             # CLI tool + plotting functions
-│   └── cathode_candidates_ranked.csv
+│   └── ptable.py             # CLI tool + plotting functions
 ├── neb_calc/                 # Stage 4: Ion migration barriers (NEB)
 └── benchmarks/               # Stage 5: Validation vs known materials
 tests/
