@@ -98,7 +98,7 @@ NCORE = 8
 _E_LI_METAL = {
     # Reference Li metal energies, computed in-house with the SAME PAW (Li_sv),
     # ENCUT=520, ISMEAR=1, SIGMA=0.1, k=17x17x17 as the cathode runs.
-    # See dft_inputs/Li_sv_PBE/ and dft_inputs/Li_sv/ (optB88-vdW).
+    # See dft_inputs/Li_sv_PBE/ and dft_inputs/Li/Li_sv_optB88vdW/ (GGA=OR).
     # The old JARVIS value (-0.925) used a different PAW/basis and was wrong by ~1 eV.
     "pbe": -1.9031,
     "optb88vdw": -0.9646,

@@ -89,7 +89,7 @@ python dft_prep.py voltage JVASP-XXXXX --e-li-metal -0.95   # Override Li metal 
 ```
 V = (E_delithiated - E_lithiated - n_li * E_li_metal) / n_li
 ```
-where `E_li_metal` is computed in-house with the same Li_sv PAW, ENCUT, and k-point density as the cathode runs (see `dft_inputs/Li_sv_PBE/` and `dft_inputs/Li_sv/`):
+where `E_li_metal` is computed in-house with the same Li_sv PAW, ENCUT, and k-point density as the cathode runs (see `dft_inputs/Li_sv_PBE/` and `dft_inputs/Li/Li_sv_optB88vdW/`):
 - **PBE:** `-1.9031 eV/atom`
 - **optB88-vdW:** `-0.9646 eV/atom`
 
