@@ -101,7 +101,7 @@ _E_LI_METAL = {
     # See dft_inputs/Li_sv_PBE/ and dft_inputs/Li_sv/ (optB88-vdW).
     # The old JARVIS value (-0.925) used a different PAW/basis and was wrong by ~1 eV.
     "pbe": -1.9031,
-    "optb88vdw": -0.9778,
+    "optb88vdw": -0.9646,
 }
 
 _LAYERED_SPACEGROUPS = {

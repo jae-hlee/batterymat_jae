@@ -91,7 +91,7 @@ V = (E_delithiated - E_lithiated - n_li * E_li_metal) / n_li
 ```
 where `E_li_metal` is computed in-house with the same Li_sv PAW, ENCUT, and k-point density as the cathode runs (see `dft_inputs/Li_sv_PBE/` and `dft_inputs/Li_sv/`):
 - **PBE:** `-1.9031 eV/atom`
-- **optB88-vdW:** `-0.9778 eV/atom`
+- **optB88-vdW:** `-0.9646 eV/atom`
 
 The previous JARVIS value (`-0.925 eV/atom`) used a different PAW and basis set and was wrong by ~1 eV/atom for our INCAR family — every PBE voltage curve was overestimated by ~1 V before this was corrected.
 
@@ -126,7 +126,7 @@ The previous JARVIS value (`-0.925 eV/atom`) used a different PAW and basis set 
 | JVASP-116897 | LiMnPO4 | LMP | Olivine | PBE | 3.91 V | ~4.1 V | 16/17 (step_16 abandoned — Mn⁴⁺ unconvergeable) |
 | JVASP-141792 | LiMn2O4 | LMO | Spinel | PBE | 4.08 V | 4.1 V (upper plateau) | **complete** |
 | JVASP-144791 | Li(Mn,Co,Ni)O2 | NMC | Layered | PBE | 4.40 V | ~3.7 V | **complete** |
-| JVASP-2017 | LiCoO2 | LCO | Layered | optB88-vdW | 4.17 V | 3.9–4.2 V | **complete** |
+| JVASP-2017 | LiCoO2 | LCO | Layered | optB88-vdW | 4.18 V | 3.9–4.2 V | **complete** |
 
 **Functional choice rationale:**
 - **LFP, LMP (olivine), LMO (spinel):** PBE+U. These are 3D-bonded frameworks with no van der Waals gaps. Standard PBE with Hubbard U correction on the transition metal d-orbitals is sufficient and well-benchmarked for these structure types.
@@ -212,7 +212,7 @@ tests/
 | Parameter | Value | Source |
 |-----------|-------|--------|
 | E_li_metal (PBE) | -1.9031 eV/atom | In-house: `dft_inputs/Li_sv_PBE/`, Li_sv PAW, ENCUT=520, k=17×17×17 |
-| E_li_metal (optB88-vdW) | -0.9778 eV/atom | In-house: `dft_inputs/Li_sv/`, Li_sv PAW, ENCUT=520, k=17×17×17 |
+| E_li_metal (optB88-vdW) | -0.9646 eV/atom | In-house: `dft_inputs/Li/Li_sv_optB88vdW/`, Li_sv PAW, GGA=OR, ENCUT=520, k=17×17×17 |
 | DFT+U values | Element-specific (see table above) | [Materials Project Hubbard U values](https://docs.materialsproject.org/methodology/materials-methodology/calculation-details/gga+u-calculations/hubbard-u-values) |
 | Crystal structures | JARVIS-DFT database (~76k materials) | [JARVIS-DFT](https://jarvis.nist.gov/), accessed via `jarvis.db.figshare.data("dft_3d")` |
 | PAW potentials | JARVIS `default_potcars.json` | `jarvis.io.vasp.inputs` module |

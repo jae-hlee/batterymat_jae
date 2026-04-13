@@ -150,9 +150,9 @@ Voltage calculations require the energy of metallic Li as a reference. Both use 
 | Functional | E_li_metal (eV/atom) | Directory |
 |-----------|---------------------|-----------|
 | PBE | -1.9031 | `dft_inputs/Li_sv_PBE/` |
-| optB88-vdW (GGA=BO) | -0.9778 | `dft_inputs/Li_sv/` |
+| optB88-vdW (GGA=OR) | -0.9646 | `dft_inputs/Li/Li_sv_optB88vdW/` |
 
-**Known issue:** The optB88-vdW Li reference was computed with `GGA=BO` (optB86b exchange), while LCO cathode steps use `GGA=OR` (optB88 exchange). These are different vdW-DF exchange functionals sharing the same nonlocal correlation kernel. A corrected Li reference with `GGA=OR` has been prepared in `dft_inputs/Li/Li_sv_optB88vdW/` but not yet run.
+**Note:** The original optB88-vdW Li reference (`dft_inputs/Li_sv/`) was computed with `GGA=BO` (optB86b exchange, -0.9778 eV/atom), while LCO cathode steps use `GGA=OR` (optB88 exchange). A corrected reference with `GGA=OR` gives -0.9646 eV/atom — a 0.013 eV difference. All LCO voltages now use the corrected value.
 
 ## LMP Step 16 (Abandoned)
 
