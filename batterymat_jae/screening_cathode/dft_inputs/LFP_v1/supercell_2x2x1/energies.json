@@ -1,0 +1,25 @@
+{
+  "jid": "JVASP-42723",
+  "dim": [
+    2,
+    2,
+    1
+  ],
+  "n_li_total": 16,
+  "functional": "pbe",
+  "e_li_metal": -0.925,
+  "steps": [
+    {
+      "step": 0,
+      "n_li": 16,
+      "energy": -760.83346526,
+      "removed_li_index": null
+    },
+    {
+      "step": 1,
+      "n_li": 15,
+      "energy": null,
+      "removed_li_index": 0
+    }
+  ]
+}

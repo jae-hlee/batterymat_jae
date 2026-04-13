@@ -1144,18 +1144,21 @@ def compute_voltage_curve(
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
 
-            fig, ax = plt.subplots(figsize=(8, 5))
+            # Extract abbreviation from directory name (e.g. JVASP-42723-LFP -> LFP)
+            _jid_dir_name = Path(supercell_dir).parent.name
+            _abbrev_parts = _jid_dir_name.split("-")[2:]  # after JVASP-XXXXX
+            _abbrev = "-".join(_abbrev_parts) if _abbrev_parts else ""
+            _title_suffix = f" ({_abbrev})" if _abbrev else ""
 
-            # Step voltages as staircase
+            # --- discharge_curve.png: staircase (step) plot ---
+            fig, ax = plt.subplots(figsize=(8, 5))
             if results:
-                xs = [1.0]  # start at full lithiation
+                xs = [1.0]
                 vs = [results[0]["voltage"]]
                 for r in results:
                     xs.extend([r["n_li_from"] / n_li_total, r["x"]])
                     vs.extend([r["voltage"], r["voltage"]])
                 ax.plot(xs, vs, "b-", linewidth=1.5, label="Step voltage")
-
-            # Convex hull voltage
             if hull_voltages:
                 hx = []
                 hv = []
@@ -1163,16 +1166,46 @@ def compute_voltage_curve(
                     hx.extend([hv_entry["x_from"], hv_entry["x_to"]])
                     hv.extend([hv_entry["voltage"], hv_entry["voltage"]])
                 ax.plot(hx, hv, "r--", linewidth=2, label="Equilibrium (hull)")
-
             ax.set_xlabel("x in Li$_x$MO")
             ax.set_ylabel("Voltage (V)")
-            ax.set_title(f"Voltage curve — {data['jid']}")
+            ax.set_title(f"Discharge curve — {data['jid']}{_title_suffix}")
             ax.legend()
             ax.set_xlim(-0.05, 1.05)
             fig.tight_layout()
-            fig.savefig(str(Path(supercell_dir) / "voltage_curve.png"), dpi=150)
+            analysis_dir = Path(supercell_dir).parents[2] / "analysis"
+            if analysis_dir.exists():
+                fig.savefig(str(analysis_dir / f"discharge_curve_{data['jid']}.png"), dpi=150)
+                print(f"Saved discharge_curve_{data['jid']}.png in {analysis_dir}")
+            else:
+                fig.savefig(str(Path(supercell_dir) / "discharge_curve.png"), dpi=150)
+                print(f"Saved discharge_curve.png in {supercell_dir}")
             plt.close(fig)
-            print(f"Saved voltage_curve.png in {supercell_dir}")
+
+            # --- voltage_curve.png: line plot (raw voltages at step midpoints) ---
+            fig, ax = plt.subplots(figsize=(8, 5))
+            if results:
+                xs = [(r["n_li_from"] + r["n_li"]) / (2 * n_li_total) for r in results]
+                vs = [r["voltage"] for r in results]
+                ax.plot(xs, vs, "b-o", linewidth=1.5, markersize=5, label="Step voltage")
+            if hull_voltages:
+                label = "Equilibrium (hull)"
+                for h in hull_voltages:
+                    ax.plot([h["x_to"], h["x_from"]], [h["voltage"], h["voltage"]],
+                            "r--", linewidth=2, label=label)
+                    label = None
+            ax.set_xlabel("x in Li$_x$MO")
+            ax.set_ylabel("Voltage (V)")
+            ax.set_title(f"Voltage curve — {data['jid']}{_title_suffix}")
+            ax.legend()
+            ax.set_xlim(-0.05, 1.05)
+            fig.tight_layout()
+            if analysis_dir.exists():
+                fig.savefig(str(analysis_dir / f"voltage_curve_{data['jid']}.png"), dpi=150)
+                print(f"Saved voltage_curve_{data['jid']}.png in {analysis_dir}")
+            else:
+                fig.savefig(str(Path(supercell_dir) / "voltage_curve.png"), dpi=150)
+                print(f"Saved voltage_curve.png in {supercell_dir}")
+            plt.close(fig)
         except ImportError:
             print("matplotlib not available — skipping plot.")
 

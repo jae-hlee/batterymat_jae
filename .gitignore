@@ -19,3 +19,25 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# VASP output files (large)
+OUTCAR
+WAVECAR
+CHGCAR
+CHG
+DOSCAR
+EIGENVAL
+IBZKPT
+PROCAR
+PCDAT
+XDATCAR
+vasprun.xml
+OSZICAR
+REPORT
+vasp.out
+vasp_*.out
+slurm-*.out
+
+# Local-only
+CLAUDE.md
+.claude/

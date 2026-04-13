@@ -98,7 +98,7 @@ The previous JARVIS value (`-0.925 eV/atom`) used a different PAW and basis set 
 **Key algorithms:**
 - **Supercell auto-sizing:** Per-axis multiplier = `ceil(7 / lattice_vector_length)`, capped at 300 atoms. Uses diagonal-only supercell matrices (JARVIS `make_supercell` limitation).
 - **Vacancy selection:** ALIGNN ranks every Li site individually (no symmetry deduplication, since symmetry is broken after the first vacancy). Removes the lowest-energy Li at each step.
-- **Convex hull voltage:** Formation energies `dE(x) = E(x) - x*E(1) - (1-x)*E(0)`, lower convex hull identifies thermodynamically stable compositions, equilibrium voltages computed from hull vertex pairs.
+- **Convex hull voltage:** Formation energies `dE(x) = E(x) - x*E(1) - (1-x)*E(0)`, lower convex hull identifies thermodynamically stable compositions, equilibrium voltages computed from hull vertex pairs. The raw step voltages (computed per individual Li removal) are noisy because many intermediate Li configurations are metastable — they sit above the convex hull and would phase-separate into a mixture of neighboring stable compositions at thermodynamic equilibrium. The hull identifies which compositions are truly stable; between two hull vertices the system exists as a two-phase mixture at constant voltage, producing the flat plateaus seen in experimental galvanostatic discharge curves. This is why the equilibrium hull voltage, not the raw step voltage, is the correct quantity to compare against experiment. For example, LMO produces two hull plateaus at 4.00 V and 4.17 V matching the known two-step discharge of spinel LiMn₂O₄, and LCO produces three plateaus (3.99/4.22/4.46 V) reflecting its staged H1→H2→H3 delithiation transitions.
 
 **Functional auto-detection:**
 - Layered cathodes (spacegroups 166/R-3m, 194/P63/mmc, 12/C2/m, 15/C2/c) -> **optB88-vdW** (PBE overestimates interlayer spacing in van der Waals bonded layers)
@@ -113,15 +113,25 @@ The previous JARVIS value (`-0.925 eV/atom`) used a different PAW and basis set 
 - **KPOINTS:** Gamma-centered, scaled inversely with supercell: `max(1, round(3/n_i))` per axis.
 - **POTCAR:** PAW labels from JARVIS `default_potcars.json` (Li_sv, Mn_pv, Fe_pv, Co, Ni_pv, etc.).
 
+**Capacity formulas:**
+- **Gravimetric:** `Q = n_Li * F / (3.6 * M)` (mAh/g), where F = 96485 C/mol and M = molecular weight of the host.
+- **Volumetric:** `Q = n_Li * F / (3.6 * V * N_A)` (mAh/cm³), where V = cell volume (cm³).
+- Gravimetric capacity is purely compositional (depends only on atomic masses and number of Li), so ALIGNN-FF and DFT values are identical. Volumetric capacity differs between methods because DFT relaxes the cell volume at each delithiation step while ALIGNN-FF uses the unrelaxed JARVIS structure throughout.
+
 **Current materials under study:**
 
 | JID | Formula | Abbreviation | Structure | Functional | DFT avg V | Experiment | Status |
 |-----|---------|-------------|-----------|------------|-----------|------------|--------|
-| JVASP-42723 | LiFePO4 | LFP | Olivine | PBE | 3.47 V | 3.45 V | 5/17 steps |
-| JVASP-116897 | LiMnPO4 | LMP | Olivine | PBE | 3.92 V | ~4.1 V | 15/17 (step_16 needs re-run) |
-| JVASP-141792 | LiMn2O4 | LMO | Spinel | PBE | 4.07 V | 4.1 V (upper plateau) | **complete** |
-| JVASP-144791 | Li(Mn,Co,Ni)O2 | NMC | Layered | PBE | 3.96 V | ~3.7 V | 8/17 steps |
+| JVASP-42723 | LiFePO4 | LFP | Olivine | PBE | 3.60 V | 3.45 V | **complete** |
+| JVASP-116897 | LiMnPO4 | LMP | Olivine | PBE | 3.91 V | ~4.1 V | 16/17 (step_16 abandoned — Mn⁴⁺ unconvergeable) |
+| JVASP-141792 | LiMn2O4 | LMO | Spinel | PBE | 4.08 V | 4.1 V (upper plateau) | **complete** |
+| JVASP-144791 | Li(Mn,Co,Ni)O2 | NMC | Layered | PBE | 4.40 V | ~3.7 V | **complete** |
 | JVASP-2017 | LiCoO2 | LCO | Layered | optB88-vdW | 4.17 V | 3.9–4.2 V | **complete** |
+
+**Functional choice rationale:**
+- **LFP, LMP (olivine), LMO (spinel):** PBE+U. These are 3D-bonded frameworks with no van der Waals gaps. Standard PBE with Hubbard U correction on the transition metal d-orbitals is sufficient and well-benchmarked for these structure types.
+- **NMC (layered):** PBE+U. Although NMC is layered, its spacegroup (R-3m) triggers optB88-vdW auto-detection. However, PBE was forced here because the NMC calculation was started before the auto-detection was implemented, and switching functional mid-run would invalidate the existing energy series. NMC interlayer bonding is partially ionic (mixed TM content) so PBE is acceptable.
+- **LCO (layered):** optB88-vdW. LiCoO₂ has a purely van der Waals bonded interlayer gap between CoO₂ slabs. PBE significantly overestimates the c-axis lattice parameter and interlayer spacing, which distorts the delithiation energetics. The vdW correction is essential for accurate voltage predictions in this material.
 
 ### Stage 4: NEB Barriers (`neb_calc/`)
 
@@ -149,11 +159,16 @@ batterymat_jae/
 ├── screening_cathode/        # Stage 3: Cathode DFT pipeline
 │   ├── screen_cathode.py     # 3a: Ranking by composite score
 │   ├── dft_prep.py           # 3b: Sequential delithiation
+│   ├── analysis/             # All plots and analysis
+│   │   ├── voltage_curve_JVASP-XXXXX.png   # Per-material line plots
+│   │   ├── discharge_curve_JVASP-XXXXX.png # Per-material staircase plots
+│   │   ├── voltage_summary.png             # ALIGNN-FF vs DFT voltage comparison
+│   │   ├── capacity_summary.png            # ALIGNN-FF vs DFT volumetric capacity
+│   │   └── hull_voltage_analysis.md        # Hull voltage vs experiment
 │   └── dft_inputs/           # VASP input directories
 │       └── JVASP-XXXXX-ABBREV/
 │           └── supercell_NxNxN/
 │               ├── energies.json
-│               ├── voltage_curve.png
 │               ├── step_00_LiXX/   (POSCAR, INCAR, KPOINTS, POTCAR_spec)
 │               ├── step_01_LiXX/
 │               ├── tmbj_step_00_LiXX/  (optional TB-mBJ static)
