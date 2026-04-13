@@ -89,7 +89,7 @@ python dft_prep.py voltage JVASP-XXXXX --e-li-metal -0.95   # Override Li metal 
 ```
 V = (E_delithiated - E_lithiated - n_li * E_li_metal) / n_li
 ```
-where `E_li_metal` is computed in-house with the same Li_sv PAW, ENCUT, and k-point density as the cathode runs (see `dft_inputs/Li_sv_PBE/` and `dft_inputs/Li/Li_sv_optB88vdW/`):
+where `E_li_metal` is computed in-house with the same Li_sv PAW, ENCUT, and k-point density as the cathode runs (see `dft_inputs/JVASP-913-Li/Li_sv_PBE/` and `dft_inputs/JVASP-913-Li/Li_sv_optB88vdW/`):
 - **PBE:** `-1.9031 eV/atom`
 - **optB88-vdW:** `-0.9646 eV/atom`
 
@@ -210,8 +210,8 @@ tests/
 
 | Parameter | Value | Source |
 |-----------|-------|--------|
-| E_li_metal (PBE) | -1.9031 eV/atom | In-house: `dft_inputs/Li_sv_PBE/`, Li_sv PAW, ENCUT=520, k=17×17×17 |
-| E_li_metal (optB88-vdW) | -0.9646 eV/atom | In-house: `dft_inputs/Li/Li_sv_optB88vdW/`, Li_sv PAW, GGA=OR, ENCUT=520, k=17×17×17 |
+| E_li_metal (PBE) | -1.9031 eV/atom | In-house: `dft_inputs/JVASP-913-Li/Li_sv_PBE/`, Li_sv PAW, ENCUT=520, k=17×17×17 |
+| E_li_metal (optB88-vdW) | -0.9646 eV/atom | In-house: `dft_inputs/JVASP-913-Li/Li_sv_optB88vdW/`, Li_sv PAW, GGA=OR, ENCUT=520, k=17×17×17 |
 | DFT+U values | Element-specific (see table above) | [Materials Project Hubbard U values](https://docs.materialsproject.org/methodology/materials-methodology/calculation-details/gga+u-calculations/hubbard-u-values) |
 | Crystal structures | JARVIS-DFT database (~76k materials) | [JARVIS-DFT](https://jarvis.nist.gov/), accessed via `jarvis.db.figshare.data("dft_3d")` |
 | PAW potentials | JARVIS `default_potcars.json` | `jarvis.io.vasp.inputs` module |
