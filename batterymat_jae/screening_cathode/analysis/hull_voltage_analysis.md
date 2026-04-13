@@ -115,7 +115,7 @@ This is the best-performing material in our study — the hull structure, platea
 | H1→H2 | 0.5 → 1.0 | 3.99 V | ~3.93 V | +0.06 V |
 | Order-disorder | 0.25 → 0.5 | 4.22 V | ~4.07 V | +0.15 V |
 | H2→H3 | 0 → 0.25 | 4.46 V | ~4.17 V | +0.29 V |
-| **Weighted avg** | **0 → 1.0** | **4.18 V** | **~3.9–4.2 V** | **within range** |
+| **Weighted avg** | **0 → 1.0** | **4.18 V** | **~4.05 V** | **+0.13 V** |
 
 **Discussion:** The three plateaus correctly capture the staged H1→H2→H3 delithiation transitions in layered LiCoO₂. The lowest plateau (H1→H2, the main discharge feature) matches well at +0.06 V. The upper two plateaus are increasingly overestimated at deep delithiation due to:
 
@@ -130,13 +130,13 @@ A larger supercell (3×3×3) and/or hybrid functional (HSE06) would improve the 
 
 ## Cross-Material Summary
 
-| Material | Structure | Functional | Hull plateaus | DFT avg V | Exp avg V | Error | Reference quality |
-|----------|-----------|-----------|---------------|-----------|-----------|-------|-------------------|
-| LFP | Olivine | PBE+U | 4 (artifact of finite cell; should be 1) | 3.60 V | ~3.42 V | +0.18 V | Strong |
-| LMP | Olivine | PBE+U | N/A (missing x=0) | 3.91 V* | ~4.1 V | −0.19 V | Strong |
-| LMO | Spinel | PBE+U | 2 (matches experiment) | 4.08 V | ~4.05 V | +0.03 V | Strong |
-| NMC | Layered | PBE+U | 5 (x>0.5 physical, x<0.5 artifact) | 3.93 V† | ~3.7 V | +0.23 V | **Weak** |
-| LCO | Layered | optB88-vdW | 3 (matches experiment) | 4.18 V | ~3.9–4.2 V | within range | Strong |
+| Material | Structure | Functional | Hull plateaus | DFT avg V | Exp avg V | Error |
+|----------|-----------|-----------|---------------|-----------|-----------|-------|
+| LFP | Olivine | PBE+U | 4 (artifact of finite cell; should be 1) | 3.60 V | ~3.42 V | +0.18 V |
+| LMP | Olivine | PBE+U | N/A (missing x=0) | 3.91 V* | ~4.1 V | −0.19 V |
+| LMO | Spinel | PBE+U | 2 (matches experiment) | 4.08 V | ~4.05 V | +0.03 V |
+| NMC | Layered | PBE+U | 5 (x>0.5 physical, x<0.5 artifact) | 3.93 V† | ~3.7 V | +0.23 V |
+| LCO | Layered | optB88-vdW | 3 (matches experiment) | 4.18 V | ~4.05 V | +0.13 V |
 
 \* Step voltage average (no hull).
 † Average restricted to x > 0.5 (physical regime only).
