@@ -187,8 +187,9 @@ batterymat_jae/
 │   ├── analysis/             # All plots and analysis
 │   │   ├── voltage_curve_JVASP-XXXXX.png   # Per-material line plots
 │   │   ├── discharge_curve_JVASP-XXXXX.png # Per-material staircase plots
-│   │   ├── voltage_summary.png             # ALIGNN-FF vs DFT voltage comparison
-│   │   ├── capacity_summary.png            # ALIGNN-FF vs DFT volumetric capacity
+│   │   ├── voltage_summary.png             # ALIGNN-FF vs DFT vs Experiment (avg/max V)
+│   │   ├── capacity_summary.png            # ALIGNN-FF vs DFT vs Experiment (vol. capacity)
+│   │   ├── make_summary_plots.py           # Regenerates the two summary plots
 │   │   └── screening_cathode_analysis.md   # DFT hull voltage + vol. capacity vs experiment
 │   └── dft_inputs/           # VASP input directories
 │       └── JVASP-XXXXX-ABBREV/

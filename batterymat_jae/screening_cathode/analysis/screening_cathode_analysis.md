@@ -168,7 +168,7 @@ A larger supercell (3×3×3) and/or hybrid functional (HSE06) would improve the 
 
 ## Part 2: Experimental Volumetric Capacity Reference
 
-The volumetric capacity in `capacity_summary.png` compares ALIGNN-FF (unrelaxed JARVIS volumes) against DFT (relaxed CONTCAR volumes). Below are the experimentally reported values from the literature for comparison.
+The volumetric capacity in `capacity_summary.png` compares ALIGNN-FF (unrelaxed JARVIS volumes), DFT (relaxed CONTCAR volumes), and the theoretical experimental value (Q_grav × ρ) as a third bar. Below are the experimentally reported values from the literature used for that column and for broader comparison.
 
 **Formula:** Q_vol (Ah/L) = Q_grav (mAh/g) × ρ (g/cm³), where ρ is the crystallographic density of the fully lithiated phase.
 
