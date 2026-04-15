@@ -65,7 +65,7 @@ init -> (run DFT on HPC -> record energy -> next step) x N -> voltage curve
 ```
 
 1. **`init JVASP-XXXXX`** -- Looks up material in JARVIS DB, builds auto-sized supercell (all lattice vectors >= 7 A), auto-detects functional (PBE vs optB88-vdW based on spacegroup), writes VASP inputs for step_00 (fully lithiated)
-2. **Run DFT externally** on HPC -- user adds POTCAR (species from POTCAR_spec) and submits
+2. **Run DFT externally** on HPC -- user adds POTCAR (species from POTCAR_spec) and submits. DFT outputs (CONTCAR, OUTCAR, etc.) should be placed in a `results/` subdirectory within each step (e.g. `step_00_Li16/results/OUTCAR`). These outputs are gitignored — the repo only carries inputs (POSCAR, INCAR, KPOINTS, POTCAR_spec).
 3. **`record JVASP-XXXXX <step> <energy>`** -- Logs total energy from OUTCAR into `energies.json`
 4. **`next JVASP-XXXXX`** -- Reads CONTCAR from previous step, uses ALIGNN to rank all symmetry-inequivalent Li vacancies by energy, removes the lowest-energy Li, writes VASP inputs for the next step
 5. **`voltage JVASP-XXXXX`** -- Computes V(x) curve with both raw step voltages and convex hull equilibrium voltages, saves plot
@@ -195,9 +195,9 @@ batterymat_jae/
 │           └── supercell_NxNxN/
 │               ├── energies.json
 │               ├── step_00_LiXX/   (POSCAR, INCAR, KPOINTS, POTCAR_spec)
-│               ├── step_01_LiXX/
-│               ├── tmbj_step_00_LiXX/  (optional TB-mBJ static)
-│               └── ...
+│               ├── step_01_LiXX/   # DFT outputs (CONTCAR, OUTCAR, etc.) live
+│               ├── tmbj_step_00_LiXX/  #   locally in each step's results/ dir
+│               └── ...             #   but are gitignored (not on GitHub)
 ├── periodic_trend/           # Interactive periodic table visualization
 │   └── ptable.py             # CLI tool + plotting functions
 ├── neb_calc/                 # Stage 4: Ion migration barriers (NEB)
