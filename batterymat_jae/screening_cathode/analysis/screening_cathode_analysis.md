@@ -1,6 +1,8 @@
-# Equilibrium Hull Voltage Comparison with Experiment
+# Screening Cathode Analysis: DFT vs Experiment
 
-## Overview
+This document compiles the two main DFT-vs-experiment comparisons for the five-material cathode screening campaign (LFP, LMP, LMO, NMC, LCO): (1) convex hull equilibrium voltages and (2) volumetric capacities, both with full literature references.
+
+## Part 1: Equilibrium Hull Voltage Comparison
 
 The convex hull (equilibrium) voltage represents the thermodynamic discharge profile — flat plateaus corresponding to two-phase coexistence regions between stable Li compositions. These are compared against experimental quasi-equilibrium measurements (low C-rate or GITT) from literature.
 
@@ -161,3 +163,39 @@ A larger supercell (3×3×3) and/or hybrid functional (HSE06) would improve the 
 | PBE+U | LMP | −0.19 V | Underestimates (U too low for Mn²⁺/³⁺) |
 | PBE+U | NMC (x>0.5) | +0.23 V | Overestimates (wrong functional for layered) |
 | optB88-vdW | LCO | +0.06 to +0.29 V | Overestimates (increases with delithiation) |
+
+---
+
+## Part 2: Experimental Volumetric Capacity Reference
+
+The volumetric capacity in `capacity_summary.png` compares ALIGNN-FF (unrelaxed JARVIS volumes) against DFT (relaxed CONTCAR volumes). Below are the experimentally reported values from the literature for comparison.
+
+**Formula:** Q_vol (Ah/L) = Q_grav (mAh/g) × ρ (g/cm³), where ρ is the crystallographic density of the fully lithiated phase.
+
+| Material | Grav. cap. (mAh/g) | Density (g/cm³) | Theoretical Q_vol (Ah/L) | Practical Q_vol (Ah/L) | Practical cutoff |
+|----------|------|------|------|------|------|
+| LFP (LiFePO₄) | 170 | 3.60 | ~612 | ~510–590 | Full (x=0) |
+| LMP (LiMnPO₄) | 171 | 3.43 | ~587 | ~250–430 | Kinetics-limited |
+| LMO (LiMn₂O₄) | 148 | 4.28 | ~633 | ~450–550 | Cycled to x≈0 |
+| NMC (NMC-111) | 278 (full) / 160 (practical) | 4.77 | ~1326 | ~760 | 4.3 V cutoff |
+| LCO (LiCoO₂) | 274 (full) / 140 (practical) | 5.05 | ~1383 | ~710 | x≥0.5 (4.2 V) |
+
+### Per-Material Notes
+
+**LFP (LiFePO₄):** Theoretical 170 mAh/g corresponds to full Li⁺ extraction (Fe²⁺/Fe³⁺). Crystallographic density 3.60 g/cm³ (Pnma olivine) gives ~612 Ah/L theoretical. Practical electrode-level capacities reach ~510–590 Ah/L in carbon-coated nanoparticle formulations; bulk micron-scale LFP is kinetically limited. References: Padhi, Nanjundaswamy & Goodenough, *J. Electrochem. Soc.* **144**, 1188 (1997); Yamada, Chung & Hinokuma, *J. Electrochem. Soc.* **148**, A224 (2001).
+
+**LMP (LiMnPO₄):** Theoretical 171 mAh/g, density 3.43 g/cm³ → ~587 Ah/L. Practical capacities are significantly lower (~250–430 Ah/L) due to poor electronic conductivity (~10⁻¹⁰ S/cm, orders of magnitude below LFP) and Jahn-Teller distortion in delithiated Mn³⁺O₆ octahedra. Requires heavy carbon coating and nanosizing. Reference: Delacourt et al., *Chem. Mater.* **16**, 93 (2004); Martha et al., *J. Electrochem. Soc.* **156**, A541 (2009).
+
+**LMO (LiMn₂O₄):** Theoretical capacity 148 mAh/g (only 1 Li per formula unit cycles reversibly between 4 V plateaus; the 3 V plateau on further lithiation causes Jahn-Teller capacity fade). Density 4.28 g/cm³ → ~633 Ah/L theoretical. Practical ~450–550 Ah/L at room temp; significant capacity fade at elevated temperatures due to Mn dissolution. References: Thackeray, David, Bruce & Goodenough, *Mater. Res. Bull.* **18**, 461 (1983); Ohzuku, Kitagawa & Hirai, *J. Electrochem. Soc.* **137**, 769 (1990).
+
+**NMC (Li[Ni,Mn,Co]O₂):** Capacity depends strongly on composition and cutoff voltage. NMC-111 theoretical 278 mAh/g (full delithiation), practical ~160 mAh/g at 4.3 V cutoff (x_Li ≈ 0.4 remaining). Density ~4.77 g/cm³ → ~760 Ah/L practical. Higher-Ni compositions (NMC-622, NMC-811) reach 180–220 mAh/g practical. The JARVIS structure (Li₄Mn₃Co₂Ni₃O₁₆, ≈ NMC-334) has no direct commercial equivalent. References: Ohzuku & Makimura, *Chem. Lett.* **30**, 642 (2001); Noh, Youn, Yoon & Sun, *J. Power Sources* **233**, 121 (2013); Manthiram, *Nat. Commun.* **11**, 1550 (2020).
+
+**LCO (LiCoO₂):** Theoretical 274 mAh/g (full x=0 delithiation). Density 5.05 g/cm³ (highest among the five) → ~1383 Ah/L theoretical. In practice, commercial cells cycle only to x ≈ 0.5 (4.2 V cutoff) giving ~140 mAh/g, ~710 Ah/L — deeper delithiation causes H2→H3 phase transition and irreversible capacity loss. Recent high-voltage LCO (4.5 V) reaches ~180 mAh/g, ~910 Ah/L. References: Mizushima, Jones, Wiseman & Goodenough, *Mater. Res. Bull.* **15**, 783 (1980); Reimers & Dahn, *J. Electrochem. Soc.* **139**, 2091 (1992).
+
+### Caveats
+
+1. **Crystallographic vs electrode-level capacity.** All values above are crystallographic (single-crystal density × gravimetric capacity). Real electrodes include binder (PVDF, ~5–10 wt%), conductive carbon (~5–10 wt%), and porosity (~30–40%), which reduce the packed-electrode volumetric capacity by 2–3×.
+
+2. **Theoretical vs practical.** Theoretical values assume full Li⁺ extraction (x=0), which is rarely achievable — either thermodynamically (LMP, LCO at high V) or kinetically (LFP, LMP at high C-rate). Practical values depend on voltage cutoff, temperature, and cycling rate.
+
+3. **DFT voltages vs DFT capacities are independent comparisons.** The voltage accuracy (within ~0.2 V of experiment for 4 of 5 materials) does not necessarily translate to capacity accuracy — capacity depends on relaxed cell volume, which is more sensitive to functional choice (PBE overestimates volumes by ~2–5%, systematically underestimating volumetric capacity).

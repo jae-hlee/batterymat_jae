@@ -189,7 +189,7 @@ batterymat_jae/
 │   │   ├── discharge_curve_JVASP-XXXXX.png # Per-material staircase plots
 │   │   ├── voltage_summary.png             # ALIGNN-FF vs DFT voltage comparison
 │   │   ├── capacity_summary.png            # ALIGNN-FF vs DFT volumetric capacity
-│   │   └── hull_voltage_analysis.md        # Hull voltage vs experiment
+│   │   └── screening_cathode_analysis.md   # DFT hull voltage + vol. capacity vs experiment
 │   └── dft_inputs/           # VASP input directories
 │       └── JVASP-XXXXX-ABBREV/
 │           └── supercell_NxNxN/
