@@ -1,6 +1,6 @@
 # BatteryMat: Computational Design Pipeline for Battery Materials
 
-BatteryMat is a computational pipeline for high-throughput screening and analysis of battery electrode materials. It combines ML force fields (ALIGNN) with DFT calculations to identify promising cathode and anode materials, predict their voltage profiles, and compute ion migration barriers. Developed at NIST by Kamal Choudhary, Michael Woodcox, and Jae Lee.
+BatteryMat is a computational pipeline for high-throughput screening and analysis of battery electrode materials. It combines ML force fields (ALIGNN) with DFT calculations to identify promising cathode and anode materials, predict their voltage profiles, and compute ion migration barriers. Originated at NIST by Kamal Choudhary and Michael Woodcox; developed by Jaehyung Lee at Johns Hopkins University.
 
 ## Setup
 
@@ -216,7 +216,7 @@ tests/
 | DFT+U values | Element-specific (see table above) | [Materials Project Hubbard U values](https://docs.materialsproject.org/methodology/materials-methodology/calculation-details/gga+u-calculations/hubbard-u-values) |
 | Crystal structures | JARVIS-DFT database (~76k materials) | [JARVIS-DFT](https://jarvis.nist.gov/), accessed via `jarvis.db.figshare.data("dft_3d")` |
 | PAW potentials | JARVIS `default_potcars.json` | `jarvis.io.vasp.inputs` module |
-| ALIGNN weights | `alignnff_wt01` | [figshare ALIGNN-FF](https://figshare.com/projects/ALIGNN-FF/) |
+| ALIGNN weights | `alignnff_wt01` | [ALIGNN (usnistgov)](https://github.com/usnistgov/alignn) -- weights auto-downloaded from figshare via `wt01_path()` |
 
 ## External Data
 
