@@ -114,12 +114,14 @@ This is the best-performing material in our study — the hull structure, platea
 
 | Plateau | x_Li range | DFT Hull | Experiment | Difference |
 |---------|-----------|----------|------------|------------|
-| H1→H2 | 0.5 → 1.0 | 3.99 V | ~3.93 V | +0.06 V |
-| Order-disorder | 0.25 → 0.5 | 4.22 V | ~4.07 V | +0.15 V |
-| H2→H3 | 0 → 0.25 | 4.46 V | ~4.17 V | +0.29 V |
+| H1→H2 | 0.5 → 1.0 | 4.01 V | ~3.93 V | +0.08 V |
+| Order-disorder | 0.25 → 0.5 | 4.23 V | ~4.07 V | +0.16 V |
+| H2→H3 | 0 → 0.25 | 4.48 V | ~4.17 V | +0.31 V |
 | **Weighted avg** | **0 → 1.0** | **4.18 V** | **~4.05 V** | **+0.13 V** |
 
-**Discussion:** The three plateaus correctly capture the staged H1→H2→H3 delithiation transitions in layered LiCoO₂. The lowest plateau (H1→H2, the main discharge feature) matches well at +0.06 V. The upper two plateaus are increasingly overestimated at deep delithiation due to:
+(Hull plateau values recomputed from current `energies.json` via `compute_voltage_curve`; values were 3.99/4.22/4.46 V in earlier snapshots.)
+
+**Discussion:** The three plateaus correctly capture the staged H1→H2→H3 delithiation transitions in layered LiCoO₂. The lowest plateau (H1→H2, the main discharge feature) matches well at +0.08 V. The upper two plateaus are increasingly overestimated at deep delithiation due to:
 
 1. **Finite supercell size:** The 2×2×2 supercell contains only 8 Li atoms. At deep delithiation (x<0.5), removing a single Li represents a 12.5% composition jump, too coarse to resolve the subtle staging transitions and Li ordering phenomena near x=0.5 and x=0.25.
 2. **Functional limitations:** optB88-vdW tends to slightly overbind the delithiated phases. The H2→H3 transition involves significant c-axis contraction and CoO₂ slab rearrangement sensitive to interlayer interaction treatment.
