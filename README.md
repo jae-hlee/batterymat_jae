@@ -45,13 +45,16 @@ Two sub-stages:
 
 **Purpose:** Rank Li-ion cathode candidates from `Li_min.csv` by a composite score.
 
+**Pool:** only the `Li_` rows of `Li_min.csv` (7,193 JIDs); rows for other working ions on the same structure are dropped.
+
 **Filters:**
 - avg_voltage: 3.0--4.5 V
-- max_grav_cap > 20 mAh/g (note: normalized to full unit cell mass, not per formula unit)
-- ehull <= 0.05 eV
+- q_grav > 100 mAh/g (theoretical gravimetric capacity per formula unit, `n_Li*F/(3.6*M)`; the original `max_grav_cap` column, which scales with cell size, is kept as `max_grav_cap_cell`)
+- ehull <= 0.05 eV/atom
 - max_voltage <= 5.5 V
+- formula contains a redox-active transition metal (Ti V Cr Mn Fe Co Ni Cu Nb Mo Ru Rh W)
 
-**Composite score:** `(1/3)*norm(avg_voltage) + (1/3)*norm(max_grav_cap) - (1/3)*norm(ehull)`
+**Composite score:** `(1/3)*norm(avg_voltage) + (1/3)*norm(q_grav) - (1/3)*norm(ehull)`; 682 candidates survive. The superseded per-cell ranking (71 entries) is archived as `analysis/cathode_candidates_ranked_v1_cellnorm.csv`.
 
 **Output:** `cathode_candidates_ranked.csv`
 
@@ -142,13 +145,13 @@ The previous JARVIS value (`-0.925 eV/atom`) used a different PAW and basis set 
 cd batterymat_jae/periodic_trend/
 python ptable.py ../screening_cathode/cathode_candidates_ranked.csv -p avg_voltage           # Mean voltage per element
 python ptable.py ../screening_cathode/cathode_candidates_ranked.csv --agg count              # Element frequency (71 candidates, 30 non-Li elements)
-python ptable.py ../screening_cathode/cathode_candidates_ranked.csv -p max_grav_cap --agg max # Best capacity per element
+python ptable.py ../screening_cathode/cathode_candidates_ranked.csv -p q_grav --agg max # Best capacity per element
 python ptable.py ../screening_cathode/cathode_candidates_ranked.csv -p ehull --log -o ehull.html  # Log scale, custom output
 ```
 
 **Arguments:**
 - `csv_path` -- positional: path to CSV (e.g. `../screening_cathode/cathode_candidates_ranked.csv`, `../../average_voltage/Li_min.csv`)
-- `-p` / `--property` -- column to aggregate: `avg_voltage`, `max_voltage`, `max_grav_cap`, `max_vol_cap`, `ehull`, `optb88vdw_bandgap`, `score` (required unless `--agg count`)
+- `-p` / `--property` -- column to aggregate: `avg_voltage`, `max_voltage`, `q_grav`, `max_grav_cap_cell`, `max_vol_cap`, `ehull`, `optb88vdw_bandgap`, `score` (required unless `--agg count`)
 - `--agg` -- aggregation function: `mean` (default), `median`, `max`, `min`, `count`
 - `--log` -- log color scale
 - `-o` / `--output` -- output HTML file (default: `ptable.html`)
@@ -202,7 +205,8 @@ batterymat_jae/
 ├── periodic_trend/           # Interactive periodic table visualization
 │   └── ptable.py             # CLI tool + plotting functions
 ├── neb_calc/                 # Stage 4: Ion migration barriers (NEB)
-└── benchmarks/               # Stage 5: Validation vs known materials
+├── benchmarks/               # Stage 5: Validation vs known materials
+└── screening_alignn/         # Separate Alexandria 14-ion screen (not part of BatteryMat pipeline)
 tests/
 └── test_dft_prep.py          # Tests for dft_prep.py
 ```
@@ -224,6 +228,10 @@ tests/
 - Google Colab demo: https://colab.research.google.com/gist/knc6/e7e3aecf3b748c0df1d58dc7911da950/
 - Theoretical capacities reference: https://github.com/ndrewwang/BotB
 
+## Related modules in this repo (not part of the BatteryMat pipeline)
+
+- **`batterymat_jae/screening_alignn/`** — separate high-throughput ALIGNN-FF voltage screen of the Alexandria PBE 3D database (~4.49M structures) across 14 working ions (Li, Na, K, Ca, Mg, Al, Zn, Cs, Rb, Sr, Ba, Cu, Ag, Y). Lives in this repo for code reuse only; outputs do not feed the BatteryMat results above. See `batterymat_jae/screening_alignn/README.md` for usage.
+
 ## Literature References
 
 1. Aydinol, M.K. et al. (1997). Ab initio calculation of the intercalation voltage of lithium-transition-metal oxide electrodes for rechargeable batteries. *J. Power Sources*, 68, 664. ([link](https://ceder.berkeley.edu/publications/jps-68-664-1997.pdf))
@@ -237,3 +245,4 @@ tests/
 9. TiSe2 cathode for beyond Li-ion batteries. *J. Power Sources* (2019). ([link](https://www.sciencedirect.com/science/article/pii/S0378775319307980))
 10. Tailoring the Morphology of LiCoO2: A First Principles Study. *Chem. Mater.* (2009). ([link](https://pubs.acs.org/doi/epdf/10.1021/cm9008943))
 11. An Overview and Future Perspectives of Aluminum Batteries. *Adv. Mater.* (2016). ([link](https://onlinelibrary.wiley.com/doi/full/10.1002/adma.201601357))
+
