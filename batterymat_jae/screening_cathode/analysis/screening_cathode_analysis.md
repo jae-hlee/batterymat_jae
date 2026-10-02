@@ -34,7 +34,7 @@ The slight upward slope from 3.48 V (high x) to 3.67 V (low x) reflects stronger
 
 ## LMP (LiMnPO₄, olivine, PBE+U)
 
-**16/17 steps complete (Li₁₆→Li₁). Step 16 (Li₀) abandoned — Mn⁴⁺ unconvergeable.**
+**16/17 steps complete (Li₁₆→Li₁). Step 16 (Li₀, the fully delithiated MnPO₄ endpoint: Mn³⁺, high-spin d⁴) abandoned — did not converge.**
 
 No convex hull computed — requires both x=1 and x=0 endpoints.
 
@@ -47,7 +47,7 @@ No convex hull computed — requires both x=1 and x=0 endpoints.
 
 **Discussion:** Without the x=0 endpoint, only raw step voltages are available. The average of 3.91 V underestimates the experimental ~4.1 V by 0.19 V. This is the opposite sign from LFP (which overestimates) — a known issue with PBE+U on Mn²⁺/Mn³⁺ olivines, where U(Mn)=3.9 eV may be slightly too low to fully localize the Mn d-electrons.
 
-The step_16 (fully delithiated MnPO₄) failed to converge despite multiple attempts with different INCAR settings (ALGO=All, cold start, gentler mixing). The energy oscillated ~200 eV above the expected ground state, trapped in a false electronic minimum. This is a well-known pathology of Mn⁴⁺ (d³) in PBE+U — the many near-degenerate magnetic configurations create an extremely rugged energy landscape. The fully delithiated state is not experimentally accessible anyway — LMP operates as a flat two-phase system and is never cycled to x=0.
+The step_16 (fully delithiated MnPO₄) failed to converge despite multiple attempts with different INCAR settings (ALGO=All, cold start, gentler mixing). The energy oscillated ~200 eV above the expected ground state, trapped in a false electronic minimum. This is a convergence difficulty of the Jahn–Teller-active Mn³⁺ (d⁴) endpoint in PBE+U — the many near-degenerate magnetic configurations create an extremely rugged energy landscape. The fully delithiated state is not experimentally accessible anyway — LMP operates as a flat two-phase system and is never cycled to x=0.
 
 Like LFP, LMP is expected to show a single flat plateau (first-order LiMnPO₄ ↔ MnPO₄ phase transition). The hull, if computable, would likely show the same finite-size splitting into multiple narrow plateaus near 4.1 V.
 
@@ -117,13 +117,13 @@ Experimentally LiCoO₂ is cycled only to about x = 0.5 (4.2 V charge cut-off), 
 | Range | Experiment | optB88-vdW+U | PBE+U (same cell) | optPBE-vdW+U (original run) |
 |-------|-----------|--------------|-------------------|-----------------------------|
 | 3/4 < x < 1 (two-phase plateau) | 3.92 V | 4.18 V (+0.26) | 3.82 V (−0.10) | 4.18 V |
-| x = 1 → 0.5 (cycled range) | ~4.05 V (3.92–4.2) | **4.21 V (+0.16)** | 3.82 V | 4.01 V |
-| 0 < x < 1/4 (two-phase plateau) | 4.50 V | 4.78 V (+0.28) | 3.81 V (−0.69) | 4.48 V |
+| x = 1 → 0.5 (cycled range) | ~4.05 V (3.92–4.2) | **4.21 V (+0.16)** | 3.81 V | 4.01 V |
+| 0 < x < 1/4 (two-phase plateau) | 4.50 V | 4.78 V (+0.28) | 3.81 V (−0.69) | 4.47 V |
 | Full range x = 1 → 0 | n/a | 4.45 V | 3.84 V | 4.18 V |
 
 Hull plateaus (optB88): 4.18 / 4.23 / 4.62 / 4.78 V. Cell volume within 1% of the lithiated cell down to x = 3/8, then contracts gradually to −6.4% at CoO₂ (no blow-up).
 
-**Discussion:** optB88-vdW+U reproduces the 0.58 V rise between the two experimental two-phase plateaus to within 0.01 V, with a uniform offset of about +0.27 V. PBE+U on the same supercell is flat (3.81–3.82 V) and misses the rise, and its cell expands by 4.4% on delithiation instead of contracting: without dispersion the interlayer binding of the Li-poor states is wrong, which is the case for routing layered hosts to the vdW functional. The functional gap on LCO is 0.62 V (full range) and 0.39 V (x = 1 → 0.5). The original optPBE run's 28% endpoint expansion did not recur with the correct functional. The uniform offset points to a systematic shift (U calibration or Li reference) rather than a deep-delithiation failure.
+**Discussion:** optB88-vdW+U reproduces the 0.58 V rise between the two experimental two-phase plateaus to within 0.01 V, with a uniform offset of about +0.27 V. PBE+U on the same supercell is flat (3.81–3.82 V) and misses the rise, and its cell expands by 3.5% on delithiation instead of contracting: without dispersion the interlayer binding of the Li-poor states is wrong, which is the case for routing layered hosts to the vdW functional. The functional gap on LCO is 0.62 V (full range) and 0.39 V (x = 1 → 0.5). The original optPBE run's 28% endpoint expansion did not recur with the correct functional. The uniform offset points to a systematic shift (U calibration or Li reference) rather than a deep-delithiation failure.
 
 **Experimental references:** Ohzuku & Ueda, *J. Electrochem. Soc.* **141**, 2972 (1994) (plateau OCVs); Tan et al., *Materials* **14**, 242 (2021) (4.2 V cut-off, ~half the theoretical capacity); Reimers & Dahn, *J. Electrochem. Soc.* **139**, 2091 (1992) (0.4 ≤ x ≤ 1 phase diagram).
 
@@ -151,7 +151,7 @@ Hull plateaus (optB88): 4.18 / 4.23 / 4.62 / 4.78 V. Cell volume within 1% of th
 
 3. **LFP reproduces the flat plateau** — the four hull plateaus are clustered within 0.19 V, consistent with a single flat plateau broadened by finite-size effects. Systematic PBE+U overestimate of +0.17 V (vs the 3.43 V two-phase equilibrium, Yamada 2001). The narrow voltage spread confirms the two-phase olivine mechanism.
 
-4. **LMP step_16 is unconvergeable** — fully delithiated Mn⁴⁺ (d³) is pathological for PBE+U. Step voltage average of 3.91 V underestimates experiment by 0.19 V. The missing x=0 endpoint prevents hull analysis but does not affect the practical result — LMP is never fully delithiated experimentally.
+4. **LMP step_16 is unconvergeable** — the fully delithiated MnPO₄ endpoint (Mn³⁺, d⁴) did not converge with PBE+U. Step voltage average of 3.91 V underestimates experiment by 0.19 V. The missing x=0 endpoint prevents hull analysis but does not affect the practical result — LMP is never fully delithiated experimentally.
 
 5. **NMC has a two-regime problem** — physically reasonable at x > 0.5 (~3.93 V, overestimates by ~0.2 V), but the x < 0.5 regime (~4.86 V) is an artifact of oxygen redox activation, wrong functional (PBE instead of optB88-vdW), and ordered cation arrangement. The x > 0.5 average is the publishable result.
 

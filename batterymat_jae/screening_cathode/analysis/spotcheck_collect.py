@@ -21,6 +21,14 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SC_DIR = HERE.parent
 MANIFEST = SC_DIR / "dft_inputs" / "spotcheck" / "spotcheck_manifest.json"
+# Endpoints that hit NSW were restarted from their last structure (2026-10-01); a restart
+# directory with results/OUTCAR replaces the original endpoint.
+RESTART = SC_DIR / "dft_inputs" / "extra_2026-10-01" / "spotcheck-restart"
+
+
+def endpoint_dir(jid: str, side: str) -> Path:
+    r = RESTART / jid / side
+    return r if (r / "results" / "OUTCAR").exists() else MANIFEST.parent / jid / side
 
 
 def read_outcar_energy(path: Path):
@@ -71,8 +79,8 @@ def main():
     rows = []
     for s in man["structures"]:
         base = MANIFEST.parent / s["jid"]
-        e_l, src_l = endpoint_energy(base / "lithiated")
-        e_d, src_d = endpoint_energy(base / "delithiated")
+        e_l, src_l = endpoint_energy(endpoint_dir(s["jid"], "lithiated"))
+        e_d, src_d = endpoint_energy(endpoint_dir(s["jid"], "delithiated"))
         row = dict(jid=s["jid"], formula=s["formula"], n_li=s["n_li"],
                    functional=s["functional"], e_li_metal=s["e_li_metal"],
                    label_V=s["label_voltage_V"], e_lith=e_l, e_delith=e_d,

@@ -51,8 +51,20 @@
     {
       "step": 6,
       "n_ion": 2,
-      "energy": null,
+      "energy": -97.63598012,
       "removed_ion_index": 1
+    },
+    {
+      "step": 7,
+      "n_ion": 1,
+      "energy": -95.0021657,
+      "removed_ion_index": 0
+    },
+    {
+      "step": 8,
+      "n_ion": 0,
+      "energy": null,
+      "removed_ion_index": 0
     }
   ],
   "tag": "NCO"

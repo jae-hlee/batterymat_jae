@@ -10,7 +10,7 @@ Summary of VASP INCAR settings used for all five cathode materials in the sequen
 | LMP (LiMnPO₄) | JVASP-116897 | 2×2×1 | 112 | PBE+U | Mn=3.9 | 2×2×3 | Li_sv, Mn_pv, P, O |
 | LMO (LiMn₂O₄) | JVASP-141792 | 2×2×2 | 112 | PBE+U | Mn=3.9 | 2×2×2 | Li_sv, Mn_pv, O |
 | NMC (Li₄Mn₃Co₂Ni₃O₁₆) | JVASP-144791 | 2×2×1 | 112 | PBE+U | Mn=3.9, Co=3.32, Ni=6.2 | 2×2×3 | Li_sv, Mn_pv, Co, Ni_pv, O |
-| LCO (LiCoO₂) | JVASP-2017 | 2×2×2 | 32 | optPBE-vdW+U (labelled optB88 until 2026-09-28; true-optB88 rerun in JVASP-2017-LCO-B88) | Co=3.32 | 2×2×2 | Li_sv, Co, O |
+| LCO (LiCoO₂) | JVASP-2017 | 2×2×2 | 32 | optB88-vdW+U in the reported chain `JVASP-2017-LCO-B88` (the original `JVASP-2017-LCO` chain was optPBE-vdW+U, labelled optB88 until 2026-09-28) | Co=3.32 | 2×2×2 | Li_sv, Co, O |
 
 ## Common Settings (All Materials)
 
@@ -168,7 +168,7 @@ consistent optPBE-vdW pair.
 
 ## LMP Step 16 (Abandoned)
 
-The fully delithiated MnPO₄ (step_16, Li₀) required special cold-start settings due to Mn⁴⁺ (d³) convergence pathology. Multiple attempts failed -- the energy was ~200 eV above the expected ground state, indicating a trapped false electronic minimum from near-degenerate magnetic configurations.
+The fully delithiated MnPO₄ (step_16, Li₀) required special cold-start settings due to the convergence difficulty of the fully delithiated MnPO₄ endpoint (Mn³⁺, d⁴). Multiple attempts failed -- the energy was ~200 eV above the expected ground state, indicating a trapped false electronic minimum from near-degenerate magnetic configurations.
 
 Final INCAR attempt:
 ```

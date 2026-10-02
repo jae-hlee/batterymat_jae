@@ -25,6 +25,7 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 SPOT = HERE.parent / "dft_inputs" / "spotcheck"
+RESTART = HERE.parent / "dft_inputs" / "extra_2026-10-01" / "spotcheck-restart"
 REDOX_METALS = {"Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu",
                 "Nb", "Mo", "Ru", "Rh", "W"}   # same set as screen_cathode.py
 V_WINDOW = (3.0, 4.5)
@@ -65,8 +66,10 @@ def main():
     for r in rows:
         if not r["dft_V"]:
             continue
-        base = SPOT / r["jid"]
-        conv = converged(base / "lithiated") and converged(base / "delithiated")
+        def side(name):  # restart directory (2026-10-01) replaces an endpoint that hit NSW
+            rd = RESTART / r["jid"] / name
+            return rd if (rd / "results" / "OUTCAR").exists() else SPOT / r["jid"] / name
+        conv = converged(side("lithiated")) and converged(side("delithiated"))
         els = set(re.findall(r"[A-Z][a-z]?", r["formula"]))
         table.append(dict(jid=r["jid"], formula=r["formula"], functional=r["functional"],
                           label=float(r["label_V"]), pred=pred[r["jid"]], dft=float(r["dft_V"]),

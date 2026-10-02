@@ -90,28 +90,29 @@ python dft_prep.py voltage JVASP-XXXXX --e-li-metal -0.95   # Override Li metal 
 
 **Voltage formula:**
 ```
-V = (E_delithiated - E_lithiated - n_li * E_li_metal) / n_li
+V = (E_delithiated - E_lithiated + n_li * E_li_metal) / n_li
 ```
-where `E_li_metal` is computed in-house with the same Li_sv PAW, ENCUT, and k-point density as the cathode runs (see `dft_inputs/JVASP-913-Li/Li_sv_PBE/` and `dft_inputs/JVASP-913-Li/Li_sv_optB88vdW/`):
+where `E_li_metal` is computed in-house with the same Li_sv PAW, ENCUT, and k-point density as the cathode runs (see `dft_inputs/JVASP-913-Li/Li_sv_PBE/`, `Li_sv_optB88vdW/` and `Li_sv_optPBEvdW/`):
 - **PBE:** `-1.9031 eV/atom`
-- **optB88-vdW:** `-0.9646 eV/atom`
+- **optB88-vdW** (`GGA = BO`, `PARAM1 = 0.1833333333`, `PARAM2 = 0.22`): `-0.9778 eV/atom`
+- **optPBE-vdW** (`GGA = OR`): `-0.9646 eV/atom`. Before 2026-09-28 the generator wrote this tag set and labelled it optB88-vdW; the original LCO chain (`JVASP-2017-LCO/`) and four prospective runs used it and have been rerun with true optB88-vdW (`*-B88/` directories).
 
-The previous JARVIS value (`-0.925 eV/atom`) used a different PAW and basis set and was wrong by ~1 eV/atom for our INCAR family — every PBE voltage curve was overestimated by ~1 V before this was corrected.
+The tabulated JARVIS value (`-0.925 eV/atom`) is an optB88-vdW energy; combined with PBE+U cathode energies it shifts every PBE voltage by about +1 V, which is why the reference is recomputed per functional (it differs from the in-house optB88-vdW value by only 0.05 eV/atom).
 
 **Key algorithms:**
 - **Supercell auto-sizing:** Per-axis multiplier = `ceil(7 / lattice_vector_length)`, capped at 300 atoms. Uses diagonal-only supercell matrices (JARVIS `make_supercell` limitation).
 - **Vacancy selection:** ALIGNN ranks every Li site individually (no symmetry deduplication, since symmetry is broken after the first vacancy). Removes the lowest-energy Li at each step.
-- **Convex hull voltage:** Formation energies `dE(x) = E(x) - x*E(1) - (1-x)*E(0)`, lower convex hull identifies thermodynamically stable compositions, equilibrium voltages computed from hull vertex pairs. The raw step voltages (computed per individual Li removal) are noisy because many intermediate Li configurations are metastable — they sit above the convex hull and would phase-separate into a mixture of neighboring stable compositions at thermodynamic equilibrium. The hull identifies which compositions are truly stable; between two hull vertices the system exists as a two-phase mixture at constant voltage, producing the flat plateaus seen in experimental galvanostatic discharge curves. This is why the equilibrium hull voltage, not the raw step voltage, is the correct quantity to compare against experiment. For example, LMO produces two hull plateaus at 4.00 V and 4.17 V matching the known two-step discharge of spinel LiMn₂O₄, and LCO produces three plateaus (4.01/4.23/4.48 V) reflecting its staged H1→H2→H3 delithiation transitions.
+- **Convex hull voltage:** Formation energies `dE(x) = E(x) - x*E(1) - (1-x)*E(0)`, lower convex hull identifies thermodynamically stable compositions, equilibrium voltages computed from hull vertex pairs. The raw step voltages (computed per individual Li removal) are noisy because many intermediate Li configurations are metastable — they sit above the convex hull and would phase-separate into a mixture of neighboring stable compositions at thermodynamic equilibrium. The hull identifies which compositions are truly stable; between two hull vertices the system exists as a two-phase mixture at constant voltage, producing the flat plateaus seen in experimental galvanostatic discharge curves. This is why the equilibrium hull voltage, not the raw step voltage, is the correct quantity to compare against experiment. For example, LMO produces two hull plateaus at 4.00 V and 4.17 V matching the known two-step discharge of spinel LiMn₂O₄, and LCO (optB88-vdW+U) produces plateaus at 4.18/4.23/4.62/4.78 V, reproducing the measured rise between its two two-phase regions (3.92 and 4.50 V) at a uniform offset of about +0.27 V.
 
 **Functional auto-detection:**
 - Layered cathodes (spacegroups 166/R-3m, 194/P63/mmc, 12/C2/m, 15/C2/c) -> **optB88-vdW** (PBE overestimates interlayer spacing in van der Waals bonded layers)
 - All others (olivines, spinels) -> **PBE**
-- Override with `--functional pbe|optb88vdw`
+- Override with `--functional pbe|optb88vdw|optpbevdw`
 
 **DFT settings:**
 - **PBE relaxation:** ENCUT=520, EDIFF=1E-4 (EDIFFG defaulted to EDIFF*10), PREC=Accurate, ISMEAR=0 SIGMA=0.05, ISPIN=2 with material-specific AFM MAGMOM, ISYM=0, LREAL=Auto, NCORE=8, KPAR=2, AMIX=0.2 BMIX=0.0001 AMIX_MAG=0.4 (gentle mixing for DFT+U on magnetic TM oxides). ISIF=3 for step 0 (full cell+ion relaxation); ISIF=2 for steps 1+ on non-layered materials (ions only — avoids Pulay stress artifacts); ISIF=3 kept for layered materials (c-axis must relax on delithiation).
 - **DFT+U (Dudarev, LDAUTYPE=2):** Applied to PBE relaxations. Element-specific U_eff values from [Materials Project](https://docs.materialsproject.org/methodology/materials-methodology/calculation-details/gga+u-calculations/hubbard-u-values): Mn=3.9, Fe=5.3, Co=3.32, Ni=6.2, V=3.25, Cr=3.7, Mo=4.38, W=6.2 eV.
-- **optB88-vdW tags:** GGA=OR, LUSE_VDW=.TRUE., AGGAC=0.0 (appended to PBE base INCAR).
+- **optB88-vdW tags:** GGA=BO, PARAM1=0.1833333333, PARAM2=0.22, LUSE_VDW=.TRUE., AGGAC=0.0 (appended to PBE base INCAR). GGA=OR with the same vdW tags is optPBE-vdW (`--functional optpbevdw`).
 - **TB-mBJ static:** METAGGA=MBJ, ALGO=All, ICHARG=2, NELM=1000, no DFT+U.
 - **KPOINTS:** Gamma-centered, scaled inversely with supercell: `max(1, round(3/n_i))` per axis.
 - **POTCAR:** PAW labels from JARVIS `default_potcars.json` (Li_sv, Mn_pv, Fe_pv, Co, Ni_pv, etc.).
@@ -125,16 +126,16 @@ The previous JARVIS value (`-0.925 eV/atom`) used a different PAW and basis set 
 
 | JID | Formula | Abbreviation | Structure | Functional | DFT avg V | Experiment | Status |
 |-----|---------|-------------|-----------|------------|-----------|------------|--------|
-| JVASP-42723 | LiFePO4 | LFP | Olivine | PBE | 3.60 V | 3.45 V | **complete** |
-| JVASP-116897 | LiMnPO4 | LMP | Olivine | PBE | 3.91 V | ~4.1 V | 16/17 (step_16 abandoned — Mn⁴⁺ unconvergeable) |
-| JVASP-141792 | LiMn2O4 | LMO | Spinel | PBE | 4.08 V | 4.1 V (upper plateau) | **complete** |
-| JVASP-144791 | Li(Mn,Co,Ni)O2 | NMC | Layered | PBE | 4.40 V | ~3.7 V | **complete** |
-| JVASP-2017 | LiCoO2 | LCO | Layered | optB88-vdW | 4.18 V | 3.9–4.2 V | **complete** |
+| JVASP-42723 | LiFePO4 | LFP | Olivine | PBE | 3.60 V | 3.43 V | **complete** |
+| JVASP-116897 | LiMnPO4 | LMP | Olivine | PBE | 3.91 V | ~4.1 V | 16/17 (step_16, the fully delithiated MnPO₄ endpoint, did not converge) |
+| JVASP-141792 | LiMn2O4 | LMO | Spinel | PBE | 4.08 V | 4.05 V | **complete** |
+| JVASP-144791 | Li4Mn3Co2Ni3O16 | NMC variant (Li:TM = 1:2) | Layered (P1 in JARVIS) | PBE | 4.40 V (4.18 V with the cell relaxed at x = 0.5 and 0; optB88-vdW 4.76 / 4.45 V) | ~3.7 V (NMC-111) | **complete** |
+| JVASP-2017 | LiCoO2 | LCO | Layered | optB88-vdW | 4.21 V over x = 1→0.5 (4.45 V over full delithiation; PBE+U 3.81 / 3.84 V) | ~4.05 V over x = 1→0.5 | **complete** (`JVASP-2017-LCO-B88/`) |
 
 **Functional choice rationale:**
 - **LFP, LMP (olivine), LMO (spinel):** PBE+U. These are 3D-bonded frameworks with no van der Waals gaps. Standard PBE with Hubbard U correction on the transition metal d-orbitals is sufficient and well-benchmarked for these structure types.
-- **NMC (layered):** PBE+U. Although NMC is layered, its spacegroup (R-3m) triggers optB88-vdW auto-detection. However, PBE was forced here because the NMC calculation was started before the auto-detection was implemented, and switching functional mid-run would invalidate the existing energy series. NMC interlayer bonding is partially ionic (mixed TM content) so PBE is acceptable.
-- **LCO (layered):** optB88-vdW. LiCoO₂ has a purely van der Waals bonded interlayer gap between CoO₂ slabs. PBE significantly overestimates the c-axis lattice parameter and interlayer spacing, which distorts the delithiation energetics. The vdW correction is essential for accurate voltage predictions in this material.
+- **NMC variant (layered):** PBE+U. The JVASP-144791 entry is layered in structure but is stored in JARVIS-DFT with P1 symmetry, so the spacegroup rule routes it to PBE+U with fixed-cell steps after step 0. An optB88-vdW+U rerun (`JVASP-144791-NMC-vdW/`) and cell-relaxed endpoints for both functionals (`extra_2026-10-01/`) show that the vdW functional raises the voltage by 0.25–0.38 V, that the fixed cell accounts for about 0.2 V of the residual, and that the jump at x = 0.5 is present in every variant.
+- **LCO (layered):** optB88-vdW+U. With PBE+U on the same supercell the voltage profile is flat (3.82 and 3.81 V over the two measured two-phase regions) and misses the 0.58 V rise that optB88-vdW+U reproduces, so the dispersion correction is needed for the Li-poor, CoO₂-like states.
 
 ### Periodic Trend Visualization (`periodic_trend/`)
 
@@ -144,7 +145,7 @@ The previous JARVIS value (`-0.925 eV/atom`) used a different PAW and basis set 
 ```bash
 cd batterymat_jae/periodic_trend/
 python ptable.py ../screening_cathode/cathode_candidates_ranked.csv -p avg_voltage           # Mean voltage per element
-python ptable.py ../screening_cathode/cathode_candidates_ranked.csv --agg count              # Element frequency (71 candidates, 30 non-Li elements)
+python ptable.py ../screening_cathode/cathode_candidates_ranked.csv --agg count              # Element frequency (682 candidates, 40 non-Li elements)
 python ptable.py ../screening_cathode/cathode_candidates_ranked.csv -p q_grav --agg max # Best capacity per element
 python ptable.py ../screening_cathode/cathode_candidates_ranked.csv -p ehull --log -o ehull.html  # Log scale, custom output
 ```
@@ -155,7 +156,7 @@ python ptable.py ../screening_cathode/cathode_candidates_ranked.csv -p ehull --l
 - `--agg` -- aggregation function: `mean` (default), `median`, `max`, `min`, `count`
 - `--log` -- log color scale
 - `-o` / `--output` -- output HTML file (default: `ptable.html`)
-- `--include-li` -- include Li in the visualization (excluded by default since it appears in all 71 candidates and dominates the color scale)
+- `--include-li` -- include Li in the visualization (excluded by default since it appears in all 682 candidates and dominates the color scale)
 
 **Output:** Interactive HTML periodic table (Bokeh + Plasma colormap). Elements with data are color-coded by the aggregated property value; elements without data are grayed out. Hover tooltips show element name and value.
 
@@ -216,7 +217,8 @@ tests/
 | Parameter | Value | Source |
 |-----------|-------|--------|
 | E_li_metal (PBE) | -1.9031 eV/atom | In-house: `dft_inputs/JVASP-913-Li/Li_sv_PBE/`, Li_sv PAW, ENCUT=520, k=17×17×17 |
-| E_li_metal (optB88-vdW) | -0.9646 eV/atom | In-house: `dft_inputs/JVASP-913-Li/Li_sv_optB88vdW/`, Li_sv PAW, GGA=OR, ENCUT=520, k=17×17×17 |
+| E_li_metal (optB88-vdW) | -0.9778 eV/atom | In-house: `dft_inputs/JVASP-913-Li/Li_sv_optB88vdW/`, Li_sv PAW, GGA=BO + PARAM1/PARAM2, ENCUT=520, k=17×17×17 |
+| E_li_metal (optPBE-vdW) | -0.9646 eV/atom | In-house: `dft_inputs/JVASP-913-Li/Li_sv_optPBEvdW/`, GGA=OR (original LCO chain only) |
 | DFT+U values | Element-specific (see table above) | [Materials Project Hubbard U values](https://docs.materialsproject.org/methodology/materials-methodology/calculation-details/gga+u-calculations/hubbard-u-values) |
 | Crystal structures | JARVIS-DFT database (~76k materials) | [JARVIS-DFT](https://jarvis.nist.gov/), accessed via `jarvis.db.figshare.data("dft_3d")` |
 | PAW potentials | JARVIS `default_potcars.json` | `jarvis.io.vasp.inputs` module |

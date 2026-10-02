@@ -11,7 +11,7 @@ Run from this directory:
 ```bash
 cd batterymat_jae/periodic_trend/
 python ptable.py ../screening_cathode/cathode_candidates_ranked.csv -p avg_voltage           # Mean voltage per element
-python ptable.py ../screening_cathode/cathode_candidates_ranked.csv --agg count              # Element frequency across 71 candidates
+python ptable.py ../screening_cathode/cathode_candidates_ranked.csv --agg count              # Element frequency across 682 candidates
 python ptable.py ../screening_cathode/cathode_candidates_ranked.csv --agg count --include-li # Include Li in count
 python ptable.py ../screening_cathode/cathode_candidates_ranked.csv -p q_grav --agg max # Best capacity per element
 python ptable.py ../screening_cathode/cathode_candidates_ranked.csv -p ehull --log -o ehull.html # Log scale, custom output
@@ -24,7 +24,7 @@ python ptable.py ../screening_cathode/cathode_candidates_ranked.csv -p ehull --l
 - `--agg` — aggregation: `mean` (default), `median`, `max`, `min`, `count`
 - `--log` — log color scale (fails if any value is negative)
 - `-o` / `--output` — output HTML file (default: `ptable.html`)
-- `--include-li` — include Li (excluded by default since it appears in all 71 candidates and dominates the visualization)
+- `--include-li` — include Li (excluded by default since it appears in all 682 candidates and dominates the visualization)
 
 ## Element extraction
 
@@ -46,4 +46,4 @@ plot_ptable_trend(data_elements=elems, data_list=vals)
 
 ## Data context
 
-`cathode_candidates_ranked.csv` contains 71 cathode candidates with 31 unique elements (30 excluding Li). The visualization shows per-element aggregated statistics, not individual material properties. For example, `-p avg_voltage` with `--agg mean` shows the mean voltage across all materials containing each element.
+`cathode_candidates_ranked.csv` contains 682 cathode candidates with 41 unique elements (40 excluding Li). The visualization shows per-element aggregated statistics, not individual material properties. For example, `-p avg_voltage` with `--agg mean` shows the mean voltage across all materials containing each element.

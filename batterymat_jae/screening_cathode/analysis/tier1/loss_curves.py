@@ -42,7 +42,7 @@ ax = axes[0]
 ax.plot(ep, trl, color=BLUE, lw=2, label="train (summed over batches)")
 ax.plot(ep, val, color=ORANGE, lw=2, label="validation (summed over batches)")
 ax.set_yscale("log"); ax.set_xlabel("Epoch"); ax.set_ylabel("MSE loss, summed over batches")
-ax.set_title("Raw history_train / history_val")
+ax.set_title("Summed over batches (as logged)")
 ax.legend(frameon=False)
 ax = axes[1]
 ax.plot(ep, trn, color=BLUE, lw=2, label=f"train ({n_tr_batches} batches/epoch)")
