@@ -26,6 +26,13 @@ RSYNC_OPTS=(
   --exclude '__pycache__/'
   --exclude '.DS_Store'
   --exclude 'results/'
+  # raw VASP outputs stay in batterymat_jae only (git-ignored in the public repo anyway)
+  --exclude 'OUTCAR'
+  --exclude 'WAVECAR'
+  --exclude 'CHGCAR'
+  --exclude 'CHG'
+  --exclude 'vasprun.xml'
+  --exclude 'vasp.out'
 )
 
 ts() { date '+%Y-%m-%d %H:%M:%S'; }
